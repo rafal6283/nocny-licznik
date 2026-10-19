@@ -40,8 +40,12 @@ jobs:
       - run: flutter analyze --no-fatal-infos --no-fatal-warnings
       - name: APK
         run: |
-          flutter build apk --release
+          set -o pipefail
+          flutter build apk --release 2>&1 | tee build.log
           cp build/app/outputs/flutter-apk/app-release.apk bakometr.apk
+      - name: Błędy kompilacji jako adnotacje
+        if: failure()
+        run: bash tool/annotate_errors.sh build.log
       - uses: actions/upload-artifact@v4
         with:
           name: bakometr-android
@@ -63,10 +67,16 @@ jobs:
       - run: flutter pub get
       - name: Konfiguracja Xcode/Podfile
         run: |
-          flutter build ios --config-only --release --no-codesign
+          set -o pipefail
+          flutter build ios --config-only --release --no-codesign 2>&1 | tee build.log
           python3 tool/patch_platforms.py ios
       - name: Build (bez podpisu)
-        run: flutter build ios --release --no-codesign
+        run: |
+          set -o pipefail
+          flutter build ios --release --no-codesign 2>&1 | tee build.log
+      - name: Błędy kompilacji jako adnotacje
+        if: failure()
+        run: bash tool/annotate_errors.sh build.log
       - name: IPA do sideloadu
         run: |
           mkdir -p Payload
