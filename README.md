@@ -39,6 +39,6 @@ flutter run
 
 Kod natywny (usługa w tle, czujnik światła, pomiar kamerą, powiadomienia, wibracje) jest w lokalnym pluginie `packages/bakometr_native`.
 
-### Własny klucz podpisu Androida (opcjonalnie)
+### Klucz podpisu Androida
 
-Bez niego każdy build jest podpisany innym kluczem debug i aktualizacja wymaga odinstalowania poprzedniej wersji. Sekrety repozytorium: `BAKOMETR_KEYSTORE_B64`, `BAKOMETR_STORE_PASS`, `BAKOMETR_KEY_ALIAS`, `BAKOMETR_KEY_PASS`.
+Stały klucz jest w `signing/` — dzięki temu każda nowa wersja instaluje się na poprzedniej bez utraty danych. Repo jest publiczne, więc klucz służy wyłącznie do prywatnego sideloadu.

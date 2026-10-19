@@ -28,23 +28,17 @@ jobs:
       - run: pip install pillow
       - name: Model YAMNet
         run: bash tool/fetch_model.sh
-      - name: Klucz podpisu (opcjonalnie z sekretów)
-        env:
-          KS: ${{ secrets.BAKOMETR_KEYSTORE_B64 }}
+      - name: Klucz podpisu (z repo, stały — aktualizacje bez odinstalowania)
         run: |
-          if [ -n "$KS" ]; then
-            echo "$KS" | base64 -d > "$RUNNER_TEMP/bakometr.jks"
-            echo "BAKOMETR_KEYSTORE=$RUNNER_TEMP/bakometr.jks" >> "$GITHUB_ENV"
-          fi
+          echo "BAKOMETR_KEYSTORE=$GITHUB_WORKSPACE/signing/bakometr.jks" >> "$GITHUB_ENV"
+          echo "BAKOMETR_STORE_PASS=$(grep storePassword signing/keystore.properties | cut -d= -f2-)" >> "$GITHUB_ENV"
+          echo "BAKOMETR_KEY_PASS=$(grep keyPassword signing/keystore.properties | cut -d= -f2-)" >> "$GITHUB_ENV"
+          echo "BAKOMETR_KEY_ALIAS=$(grep keyAlias signing/keystore.properties | cut -d= -f2-)" >> "$GITHUB_ENV"
       - name: Katalogi platform
         run: PLATFORMS=android bash tool/prepare_platforms.sh
       - run: flutter pub get
       - run: flutter analyze --no-fatal-infos --no-fatal-warnings
       - name: APK
-        env:
-          BAKOMETR_STORE_PASS: ${{ secrets.BAKOMETR_STORE_PASS }}
-          BAKOMETR_KEY_ALIAS: ${{ secrets.BAKOMETR_KEY_ALIAS }}
-          BAKOMETR_KEY_PASS: ${{ secrets.BAKOMETR_KEY_PASS }}
         run: |
           flutter build apk --release
           cp build/app/outputs/flutter-apk/app-release.apk bakometr.apk
