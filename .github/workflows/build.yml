@@ -1,0 +1,104 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: pip install pillow
+      - name: Model YAMNet
+        run: bash tool/fetch_model.sh
+      - name: Klucz podpisu (opcjonalnie z sekretów)
+        env:
+          KS: ${{ secrets.BAKOMETR_KEYSTORE_B64 }}
+        run: |
+          if [ -n "$KS" ]; then
+            echo "$KS" | base64 -d > "$RUNNER_TEMP/bakometr.jks"
+            echo "BAKOMETR_KEYSTORE=$RUNNER_TEMP/bakometr.jks" >> "$GITHUB_ENV"
+          fi
+      - name: Katalogi platform
+        run: PLATFORMS=android bash tool/prepare_platforms.sh
+      - run: flutter pub get
+      - run: flutter analyze --no-fatal-infos --no-fatal-warnings
+      - name: APK
+        env:
+          BAKOMETR_STORE_PASS: ${{ secrets.BAKOMETR_STORE_PASS }}
+          BAKOMETR_KEY_ALIAS: ${{ secrets.BAKOMETR_KEY_ALIAS }}
+          BAKOMETR_KEY_PASS: ${{ secrets.BAKOMETR_KEY_PASS }}
+        run: |
+          flutter build apk --release
+          cp build/app/outputs/flutter-apk/app-release.apk bakometr.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bakometr-android
+          path: bakometr.apk
+
+  ios:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: pip3 install --break-system-packages pillow || pip3 install pillow
+      - name: Model YAMNet
+        run: bash tool/fetch_model.sh
+      - name: Katalogi platform
+        run: PLATFORMS=ios bash tool/prepare_platforms.sh
+      - run: flutter pub get
+      - name: Konfiguracja Xcode/Podfile
+        run: |
+          flutter build ios --config-only --release --no-codesign
+          python3 tool/patch_platforms.py ios
+      - name: Build (bez podpisu)
+        run: flutter build ios --release --no-codesign
+      - name: IPA do sideloadu
+        run: |
+          mkdir -p Payload
+          cp -R build/ios/iphoneos/Runner.app Payload/
+          zip -qr bakometr.ipa Payload
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bakometr-ios
+          path: bakometr.ipa
+
+  release:
+    needs: [android, ios]
+    if: ${{ always() && needs.android.result == 'success' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: out
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ github.run_number }}
+          name: Bąkometr build ${{ github.run_number }}
+          body: |
+            Automatyczny build z `${{ github.sha }}`.
+            - **Android:** pobierz `bakometr.apk` i zainstaluj.
+            - **iPhone:** `bakometr.ipa` (niepodpisany) — wgraj przez Sideloadly/AltStore z darmowym Apple ID.
+          files: out/*
+          make_latest: true

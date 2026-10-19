@@ -1,0 +1,13 @@
+.dart_tool/
+build/
+.flutter-plugins
+.flutter-plugins-dependencies
+pubspec.lock
+*.iml
+.idea/
+.vscode/
+# model pobierany w CI (tool/fetch_model.sh)
+/assets/yamnet.tflite
+# katalogi platform generowane w CI przez tool/prepare_platforms.sh
+/android/
+/ios/
