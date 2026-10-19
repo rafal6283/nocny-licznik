@@ -82,6 +82,14 @@ def patch_android():
     gradle.write_text(g)
     log(f"{gradle.name}: minSdk 26")
 
+    # Starsze pluginy (np. tflite_flutter) mają inny cel JVM dla Javy i Kotlina —
+    # nowe wersje Kotlina traktują to jako błąd; obniżamy do ostrzeżenia.
+    props = ROOT / "android" / "gradle.properties"
+    pt = props.read_text() if props.exists() else ""
+    if "kotlin.jvm.target.validation.mode" not in pt:
+        props.write_text(pt.rstrip("\n") + "\nkotlin.jvm.target.validation.mode=warning\n")
+        log("gradle.properties: walidacja celu JVM jako ostrzeżenie")
+
     manifest = app / "src" / "main" / "AndroidManifest.xml"
     m = manifest.read_text()
     m = re.sub(r'android:label="[^"]*"', f'android:label="{APP_NAME}"', m, count=1)
