@@ -79,8 +79,25 @@ def patch_android():
             g = g.replace("signingConfig = signingConfigs.debug", "signingConfig = signingConfigs.release")
             g = g.replace("signingConfig signingConfigs.debug", "signingConfig signingConfigs.release")
         log("podpis wydania: własny klucz")
+    # R8 usuwa z pluginów (shared_preferences, sqflite, record…) metody wołane przez
+    # kanały Fluttera → NoSuchMethodError przy starcie. Wyłączamy zmniejszanie kodu.
+    if "isMinifyEnabled = false" not in g and "minifyEnabled false" not in g:
+        if kts:
+            g = re.sub(r'(getByName\("release"\)\s*\{|release\s*\{)(?![^}]*storeFile)',
+                       lambda m: m.group(0) + "\n            isMinifyEnabled = false\n            isShrinkResources = false",
+                       g, count=1)
+        else:
+            g = re.sub(r'(buildTypes\s*\{\s*release\s*\{)',
+                       lambda m: m.group(0) + "\n            minifyEnabled false\n            shrinkResources false",
+                       g, count=1)
+    if "isMinifyEnabled = false" not in g and "minifyEnabled false" not in g:
+        sys.exit("[patch] BŁĄD: nie udało się wyłączyć R8 w " + gradle.name)
     gradle.write_text(g)
-    log(f"{gradle.name}: minSdk 26")
+    log(f"{gradle.name}: minSdk 26, bez R8")
+
+    rules = app / "proguard-rules.pro"
+    rules.write_text("-keep class io.flutter.plugins.** { *; }\n-keep class pl.rafal.** { *; }\n"
+                     "-keep class org.tensorflow.** { *; }\n-dontwarn org.tensorflow.**\n")
 
     # Starsze pluginy (np. tflite_flutter) mają inny cel JVM dla Javy i Kotlina —
     # nowe wersje Kotlina traktują to jako błąd; obniżamy do ostrzeżenia.
