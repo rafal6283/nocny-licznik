@@ -1,5 +1,5 @@
 /// Typy wykrywanych zdarzeń dźwiękowych.
-enum SoundType { fart, snore, talk, cough }
+enum SoundType { fart, snore, talk, cough, apnea }
 
 extension SoundTypeX on SoundType {
   String get label => switch (this) {
@@ -7,12 +7,14 @@ extension SoundTypeX on SoundType {
         SoundType.snore => 'Chrapanie',
         SoundType.talk => 'Mówienie',
         SoundType.cough => 'Kaszel',
+        SoundType.apnea => 'Przerwa w oddechu',
       };
   String get emoji => switch (this) {
         SoundType.fart => '💨',
         SoundType.snore => '😴',
         SoundType.talk => '💬',
         SoundType.cough => '🤧',
+        SoundType.apnea => '🫁',
       };
   static SoundType parse(String s) =>
       SoundType.values.firstWhere((e) => e.name == s, orElse: () => SoundType.fart);
@@ -55,6 +57,9 @@ class Night {
   int snoreMin;
   int talkCount;
   int coughCount;
+  int apneaCount;
+  double apneaIndex; // przerwy w oddechu na godzinę snu
+  int micBlockedMin; // minuty, gdy mikrofon dawał cyfrową ciszę (zajęty)
   double? avgLux;
   double? maxLux;
 
@@ -81,6 +86,9 @@ class Night {
     this.snoreMin = 0,
     this.talkCount = 0,
     this.coughCount = 0,
+    this.apneaCount = 0,
+    this.apneaIndex = 0,
+    this.micBlockedMin = 0,
     this.avgLux,
     this.maxLux,
   }) : tags = tags ?? [];
@@ -110,6 +118,9 @@ class Night {
         'snore_min': snoreMin,
         'talk_count': talkCount,
         'cough_count': coughCount,
+        'apnea_count': apneaCount,
+        'apnea_index': apneaIndex,
+        'mic_blocked_min': micBlockedMin,
         'avg_lux': avgLux,
         'max_lux': maxLux,
       };
@@ -139,6 +150,9 @@ class Night {
         snoreMin: (m['snore_min'] as int?) ?? 0,
         talkCount: (m['talk_count'] as int?) ?? 0,
         coughCount: (m['cough_count'] as int?) ?? 0,
+        apneaCount: (m['apnea_count'] as int?) ?? 0,
+        apneaIndex: (m['apnea_index'] as num?)?.toDouble() ?? 0,
+        micBlockedMin: (m['mic_blocked_min'] as int?) ?? 0,
         avgLux: (m['avg_lux'] as num?)?.toDouble(),
         maxLux: (m['max_lux'] as num?)?.toDouble(),
       );
@@ -201,6 +215,8 @@ class MinuteSample {
   final double? lux;
   final int farts;
   final bool snore;
+  final int apneas;
+  final int sounds; // inne zdarzenia dźwiękowe (mowa, kaszel) — oznaka płytkiego snu/czuwania
   Stage stage;
 
   MinuteSample({
@@ -211,6 +227,8 @@ class MinuteSample {
     this.lux,
     this.farts = 0,
     this.snore = false,
+    this.apneas = 0,
+    this.sounds = 0,
     this.stage = Stage.light,
   });
 
@@ -223,6 +241,8 @@ class MinuteSample {
         'lux': lux,
         'farts': farts,
         'snore': snore ? 1 : 0,
+        'apneas': apneas,
+        'sounds': sounds,
         'stage': stage.index,
       };
 
@@ -234,6 +254,16 @@ class MinuteSample {
         lux: (m['lux'] as num?)?.toDouble(),
         farts: (m['farts'] as int?) ?? 0,
         snore: (m['snore'] as int?) == 1,
+        apneas: (m['apneas'] as int?) ?? 0,
+        sounds: (m['sounds'] as int?) ?? 0,
         stage: Stage.values[(m['stage'] as int?) ?? 2],
       );
+}
+
+/// Kategoria wskaźnika przerw w oddechu (progi jak dla AHI: 5 / 15 / 30 na godzinę).
+String apneaCategory(double perHour) {
+  if (perHour < 5) return 'w normie';
+  if (perHour < 15) return 'łagodnie podwyższony';
+  if (perHour < 30) return 'umiarkowanie podwyższony';
+  return 'wysoki';
 }

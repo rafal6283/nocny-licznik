@@ -1,7 +1,7 @@
 name: bakometr
-description: "Bąkometr — nocny monitor snu z liczeniem wiatrów, chrapania, światła i inteligentnym budzikiem."
+description: "Nocny Licznik — nocny monitor snu z liczeniem wiatrów, chrapania, światła i inteligentnym budzikiem."
 publish_to: 'none'
-version: 1.0.0+1
+version: 2.0.0+2
 
 environment:
   sdk: ">=3.6.0 <4.0.0"

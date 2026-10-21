@@ -9,9 +9,16 @@ class ClassScores {
   final double snore;
   final double speech;
   final double cough;
+  final double breathing;
+  final double gasp; // westchnięcie / łapanie powietrza
+  final double snort; // parsknięcie, typowe po przerwie w oddechu
   final String top;
   final double topScore;
-  const ClassScores(this.fart, this.snore, this.speech, this.cough, this.top, this.topScore);
+  const ClassScores(this.fart, this.snore, this.speech, this.cough, this.breathing, this.gasp, this.snort,
+      this.top, this.topScore);
+
+  /// Dźwięk wznowienia oddechu po przerwie.
+  double get recovery => [gasp, snort, snore, breathing * 0.8].reduce((a, b) => a > b ? a : b);
 }
 
 /// YAMNet (Google, AudioSet, 521 klas) uruchamiany lokalnie przez TensorFlow Lite.
@@ -22,12 +29,12 @@ class SoundClassifier {
 
   final Interpreter _it;
   final List<String> _labels;
-  final int _iFart, _iSnore, _iSpeech, _iCough;
+  final int _iFart, _iSnore, _iSpeech, _iCough, _iBreath, _iGasp, _iSnort;
   final List<int> _inShape;
   final int _scoresOutput;
 
   SoundClassifier._(this._it, this._labels, this._iFart, this._iSnore, this._iSpeech, this._iCough,
-      this._inShape, this._scoresOutput);
+      this._iBreath, this._iGasp, this._iSnort, this._inShape, this._scoresOutput);
 
   static Future<SoundClassifier> load() async {
     final it = await Interpreter.fromAsset('assets/yamnet.tflite');
@@ -64,7 +71,7 @@ class SoundClassifier {
     }
 
     return SoundClassifier._(it, labels, idx('Fart', 55), idx('Snoring', 38), idx('Speech', 0),
-        idx('Cough', 42), inShape, scores);
+        idx('Cough', 42), idx('Breathing', 36), idx('Gasp', 39), idx('Snort', 41), inShape, scores);
   }
 
   ClassScores classify(Float32List window) {
@@ -88,7 +95,7 @@ class SoundClassifier {
     for (var i = 1; i < s.length; i++) {
       if (s[i] > s[top]) top = i;
     }
-    return ClassScores(s[_iFart], s[_iSnore], s[_iSpeech], s[_iCough],
+    return ClassScores(s[_iFart], s[_iSnore], s[_iSpeech], s[_iCough], s[_iBreath], s[_iGasp], s[_iSnort],
         top < _labels.length ? _labels[top] : '?', s[top]);
   }
 

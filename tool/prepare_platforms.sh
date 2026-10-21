@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Generuje katalogi android/ i ios/ (flutter create) i nakłada na nie poprawki Bąkometru.
+# Generuje katalogi android/ i ios/ (flutter create) i nakłada na nie poprawki Nocnego Licznika.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 

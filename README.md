@@ -1,4 +1,4 @@
-# 💨 Bąkometr
+# 🌙 Nocny Licznik
 
 Nocny monitor snu na Android i iOS w stylu Sleep Cycle / Sleep as Android — z głównym naciskiem na **liczenie puszczanych wiatrów**.
 
@@ -6,7 +6,10 @@ Nocny monitor snu na Android i iOS w stylu Sleep Cycle / Sleep as Android — z 
 
 - **Liczenie wiatrów** — rozpoznawanie dźwięków modelem [YAMNet](https://github.com/tensorflow/models/tree/master/research/audioset/yamnet) (Google, AudioSet, klasa „Fart”) działającym offline na telefonie
 - **Chrapanie, mówienie przez sen, kaszel** — z krótkimi nagraniami do odsłuchu i weryfikacji rano (✓ / ✗)
-- **Fazy snu i ocena nocy** — hipnogram z ruchu telefonu na materacu i dźwięku (estymacja, nie badanie medyczne)
+- **Fazy snu i ocena nocy** — ukryty model Markowa (dekodowanie Viterbiego) łączący aktygrafię z ruchu telefonu na materacu, chrapanie, dźwięki i fizjologię cykli snu (estymacja, nie badanie medyczne)
+- **Przerwy w oddechu (bezdech)** — wzorzec „oddech/chrapanie → cisza ≥10 s → westchnienie/chrapnięcie”, wskaźnik przerw na godzinę snu z progami 5/15/30 jak dla AHI, nagrania do odsłuchu. Orientacyjnie, nie diagnoza
+- **Wykres snu w stylu Sleep Cycle** — płynna fala głębokości snu, pasy zdarzeń, kursor
+- **Ostrzeżenie o zajętym mikrofonie** — gdy inna aplikacja przejmie mikrofon
 - **Światło w sypialni** — Android: czujnik światła przez całą noc; iPhone: pomiar przednią kamerą przy starcie i przy otwarciu aplikacji + ręczny wybór
 - **Inteligentny budzik** — okno 15/30/45 min, dzwoni w lekkiej fazie snu; narastająca głośność, drzemka, wibracje
 - **Zadanie do wyłączenia budzika** — matematyka lub potrząśnięcie telefonem
@@ -22,8 +25,8 @@ Wszystkie dane i nagrania zostają na telefonie.
 
 Każdy push na `main` buduje aplikację w GitHub Actions i publikuje wydanie w zakładce **Releases**:
 
-- **Android** — `bakometr.apk`
-- **iPhone** — `bakometr.ipa` (niepodpisany), do wgrania przez Sideloadly / AltStore z darmowym Apple ID (ważny 7 dni)
+- **Android** — `nocny-licznik.apk`
+- **iPhone** — `nocny-licznik.ipa` (niepodpisany), do wgrania przez Sideloadly / AltStore z darmowym Apple ID (ważny 7 dni)
 
 ## Jak używać
 

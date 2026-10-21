@@ -31,7 +31,7 @@ public class BakometrNativePlugin implements FlutterPlugin, MethodChannel.Method
     private MethodChannel channel;
     private Context ctx;
     private Activity activity;
-    private String trackingTitle = "Bąkometr nasłuchuje";
+    private String trackingTitle = "Nocny Licznik nasłuchuje";
     private final Handler main = new Handler(Looper.getMainLooper());
 
     @Override

@@ -81,7 +81,7 @@ class _BakometrAppState extends State<BakometrApp> {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Bąkometr',
+      title: 'Nocny Licznik',
       debugShowCheckedModeBanner: false,
       theme: buildTheme(),
       navigatorKey: navigatorKey,
@@ -105,7 +105,7 @@ class BootScreen extends StatelessWidget {
             const SizedBox(height: 40),
             const Center(child: Text('💨', style: TextStyle(fontSize: 56))),
             const SizedBox(height: 12),
-            Center(child: Text('Bąkometr · $step', style: const TextStyle(color: C.muted))),
+            Center(child: Text('Nocny Licznik · $step', style: const TextStyle(color: C.muted))),
             const SizedBox(height: 12),
             const Center(child: SizedBox(width: 28, height: 28, child: CircularProgressIndicator(strokeWidth: 3))),
             const SizedBox(height: 24),

@@ -7,7 +7,7 @@ LOG="${1:-build.log}"
   # Gradle: blok „What went wrong” do „Try:”
   awk '/What went wrong/{f=1} /^\* Try:/{f=0} f' "$LOG"
   # Kotlin/Java/Swift/Dart: linie błędów kompilatora
-  grep -E "^e: |error:|\.java:[0-9]+: error|\.swift:[0-9]+:[0-9]+: error|\.dart:[0-9]+:[0-9]+: Error" "$LOG"
+  grep -E "^e: |error:|error •|\.java:[0-9]+: error|\.swift:[0-9]+:[0-9]+: error|\.dart:[0-9]+:[0-9]+: Error" "$LOG"
 } | awk '!seen[$0]++' | head -80 > errs.txt
 [ -s errs.txt ] || tail -40 "$LOG" > errs.txt
 split -l 10 errs.txt chunk_

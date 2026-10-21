@@ -18,8 +18,7 @@ class SleepSummary {
   });
 }
 
-/// Szacowanie faz snu z aktygrafii (ruch telefonu leżącego na materacu) i dźwięku,
-/// w duchu algorytmu Cole'a–Kripkego + typowego rytmu ~90-minutowych cykli.
+/// Szacowanie faz snu z aktygrafii (ruch telefonu leżącego na materacu) i dźwięku.
 /// To estymacja, nie polisomnografia.
 class SleepAnalysis {
   static double _median(List<double> v) {
@@ -64,6 +63,13 @@ class SleepAnalysis {
   }
 
   /// Przypisuje fazy do minut (modyfikuje [ms]) i zwraca podsumowanie.
+  ///
+  /// Algorytm: ukryty model Markowa (4 stany) dekodowany Viterbim.
+  /// • Emisje: aktywność (aktygrafia w stylu Cole'a–Kripkego, skala log), chrapanie
+  ///   (częste w N2/N3, rzadkie w REM), mowa/kaszel (czuwanie/płytki sen).
+  /// • Prior fizjologiczny: sen głęboki dominuje w pierwszej części nocy, REM w drugiej;
+  ///   REM zwykle nie pojawia się w pierwszej godzinie po zaśnięciu.
+  /// • Przejścia: fazy trwają minuty, nie skaczą co minutę (wygładzenie bez ręcznych reguł).
   static SleepSummary analyze(List<MinuteSample> ms, {required int goalMin}) {
     if (ms.isEmpty) {
       return const SleepSummary(
@@ -71,64 +77,111 @@ class SleepAnalysis {
           latencyMin: 0, awakenings: 0, score: 0);
     }
     final a = activity(ms);
-    const wakeT = 6.0;
-    // Próg głębokiego snu: 30. percentyl aktywności (ok. 15–25% nocy po filtrze bloków).
-    final sorted = [...a]..sort();
-    final lightT = min(1.6, sorted[(sorted.length * 0.3).floor().clamp(0, sorted.length - 1)] + 1e-6);
+    final n = ms.length;
 
-    // Zaśnięcie: pierwsze 10 kolejnych minut spokoju.
-    var onset = ms.length;
+    // Wstępne zaśnięcie (do priorów czasowych): 10 kolejnych spokojnych minut.
+    var onset0 = 0;
     var run = 0;
-    for (var i = 0; i < a.length; i++) {
+    for (var i = 0; i < n; i++) {
       run = a[i] < 3.0 ? run + 1 : 0;
+      if (run >= 10) {
+        onset0 = i - 9;
+        break;
+      }
+    }
+
+    // Kolejność stanów = Stage.values: wake, rem, light, deep
+    const mu = [1.6, 0.55, 0.35, -0.9]; // oczekiwane ln(aktywność + 0,2)
+    const sd = [1.0, 0.6, 0.65, 0.6];
+    const pSnore = [0.02, 0.06, 0.30, 0.38];
+    const pSound = [0.30, 0.06, 0.05, 0.01];
+
+    double gauss(double x, double m, double s) => -0.5 * pow((x - m) / s, 2) - log(s);
+
+    final emis = List.generate(n, (i) {
+      final x = log(a[i] + 0.2);
+      final sinceOnset = max(0, i - onset0);
+      final t = sinceOnset / max(1, n - onset0); // 0..1 postęp nocy
+      final out = List<double>.filled(4, 0);
+      for (var k = 0; k < 4; k++) {
+        var e = gauss(x, mu[k], sd[k]);
+        e += log(ms[i].snore ? pSnore[k] : 1 - pSnore[k]);
+        e += log(ms[i].sounds > 0 ? pSound[k] : 1 - pSound[k]);
+        out[k] = e;
+      }
+      // Priory fizjologiczne
+      out[3] += log(0.25 + 1.5 * pow(1 - t, 2)); // głęboki: wcześnie
+      out[1] += log(0.2 + 1.3 * t); // REM: później
+      if (sinceOnset < 60) out[1] += log(0.15);
+      if (i < onset0) out[0] += 1.5; // przed zaśnięciem raczej czuwanie
+      return out;
+    });
+
+    // Macierz przejść (log), na minutę
+    final tr = [
+      [0.90, 0.01, 0.085, 0.005], // z czuwania
+      [0.03, 0.92, 0.05, 0.0001], // z REM
+      [0.025, 0.02, 0.92, 0.035], // z płytkiego
+      [0.01, 0.0005, 0.06, 0.9295], // z głębokiego
+    ].map((r) => r.map((v) => log(v)).toList()).toList();
+
+    // Viterbi
+    final score = List.generate(n, (_) => List<double>.filled(4, -1e18));
+    final back = List.generate(n, (_) => List<int>.filled(4, 0));
+    const init = [0.85, 0.01, 0.13, 0.01];
+    for (var k = 0; k < 4; k++) {
+      score[0][k] = log(init[k]) + emis[0][k];
+    }
+    for (var i = 1; i < n; i++) {
+      for (var k = 0; k < 4; k++) {
+        var best = -1e18;
+        var arg = 0;
+        for (var j = 0; j < 4; j++) {
+          final v = score[i - 1][j] + tr[j][k];
+          if (v > best) {
+            best = v;
+            arg = j;
+          }
+        }
+        score[i][k] = best + emis[i][k];
+        back[i][k] = arg;
+      }
+    }
+    final path = List<int>.filled(n, 0);
+    var last = 0;
+    for (var k = 1; k < 4; k++) {
+      if (score[n - 1][k] > score[n - 1][last]) last = k;
+    }
+    path[n - 1] = last;
+    for (var i = n - 1; i > 0; i--) {
+      path[i - 1] = back[i][path[i]];
+    }
+    final st = [for (final k in path) Stage.values[k]];
+
+    // Zaśnięcie i ostateczne przebudzenie z wyniku dekodowania
+    var onset = n;
+    run = 0;
+    for (var i = 0; i < n; i++) {
+      run = st[i] != Stage.wake ? run + 1 : 0;
       if (run >= 10) {
         onset = i - 9;
         break;
       }
     }
-    // Ostateczne przebudzenie: ostatnia minuta, po której jest już tylko czuwanie.
-    var finalWake = ms.length;
-    for (var i = a.length - 1; i > onset; i--) {
-      if (a[i] < wakeT) {
+    var finalWake = n;
+    for (var i = n - 1; i >= onset && i >= 0; i--) {
+      if (st[i] != Stage.wake) {
         finalWake = i + 1;
         break;
       }
     }
-
-    final st = List<Stage>.filled(ms.length, Stage.light);
-    for (var i = 0; i < ms.length; i++) {
-      if (i < onset || i >= finalWake) {
-        st[i] = Stage.wake;
-      } else if (a[i] >= wakeT) {
-        st[i] = Stage.wake;
-      } else if (a[i] < lightT) {
-        st[i] = Stage.deep;
-      }
-    }
-    // Głęboki sen tylko w spokojnych blokach >= 10 min.
-    _keepRuns(st, Stage.deep, 10, Stage.light);
-
-    // REM: płytkie, spokojne fragmenty w drugiej części każdego ~90-min cyklu,
-    // bez chrapania (w REM mięśnie są zwiotczałe, chrapanie rzadsze).
-    for (var i = onset; i < finalWake; i++) {
-      if (st[i] != Stage.light) continue;
-      final sinceOnset = i - onset;
-      final pos = sinceOnset % 90;
-      final cycle = sinceOnset ~/ 90;
-      final remStart = max(55, 75 - cycle * 8); // REM wydłuża się nad ranem
-      if (sinceOnset >= 60 && pos >= remStart && a[i] < 3.5 && !ms[i].snore) {
-        st[i] = Stage.rem;
-      }
-    }
-    _keepRuns(st, Stage.rem, 5, Stage.light);
-    _keepRuns(st, Stage.wake, 2, Stage.light, protectEdges: true, onset: onset, finalWake: finalWake);
-
-    for (var i = 0; i < ms.length; i++) {
+    for (var i = 0; i < n; i++) {
+      if (i < onset || i >= finalWake) st[i] = Stage.wake;
       ms[i].stage = st[i];
     }
 
     var deep = 0, light = 0, rem = 0, wake = 0, awakenings = 0;
-    for (var i = 0; i < st.length; i++) {
+    for (var i = 0; i < n; i++) {
       switch (st[i]) {
         case Stage.deep:
           deep++;
@@ -142,18 +195,21 @@ class SleepAnalysis {
       }
     }
     final sleep = deep + light + rem;
-    final inBed = ms.length;
+    final inBed = n;
     final snoreMin = ms.where((m) => m.snore).length;
+    final apneas = ms.fold<int>(0, (s, m) => s + m.apneas);
 
     // Ocena 0–100
-    final durScore = min(1.0, sleep / max(goalMin, 1)) * 40;
+    final durScore = min(1.0, sleep / max(goalMin, 1)) * 38;
     final eff = inBed > 0 ? sleep / inBed : 0.0;
     final effScore = (eff.clamp(0.5, 0.95) - 0.5) / 0.45 * 20;
-    final deepScore = sleep > 0 ? min(1.0, deep / (0.18 * sleep)) * 15 : 0.0;
+    final deepScore = sleep > 0 ? min(1.0, deep / (0.18 * sleep)) * 14 : 0.0;
     final remScore = sleep > 0 ? min(1.0, rem / (0.18 * sleep)) * 10 : 0.0;
     final disrupt = max(0.0, 1 - awakenings / 8) * 10;
-    final snore = sleep > 0 ? (1 - min(1.0, snoreMin / sleep * 4)) * 5 : 0.0;
-    final score = (durScore + effScore + deepScore + remScore + disrupt + snore).round().clamp(0, 100);
+    final snore = sleep > 0 ? (1 - min(1.0, snoreMin / sleep * 4)) * 4 : 0.0;
+    final ahi = sleep >= 60 ? apneas / (sleep / 60) : 0.0;
+    final breath = (1 - min(1.0, ahi / 30)) * 4;
+    final score = (durScore + effScore + deepScore + remScore + disrupt + snore + breath).round().clamp(0, 100);
 
     return SleepSummary(
       inBedMin: inBed,
@@ -168,27 +224,34 @@ class SleepAnalysis {
     );
   }
 
-  /// Zamienia zbyt krótkie bloki fazy [s] na [replace].
-  static void _keepRuns(List<Stage> st, Stage s, int minLen, Stage replace,
-      {bool protectEdges = false, int onset = 0, int finalWake = 0}) {
-    var i = 0;
-    while (i < st.length) {
-      if (st[i] != s) {
-        i++;
-        continue;
-      }
-      var j = i;
-      while (j < st.length && st[j] == s) {
-        j++;
-      }
-      final edge = protectEdges && (i < onset || j > finalWake);
-      if (j - i < minLen && !edge) {
-        for (var k = i; k < j; k++) {
-          st[k] = replace;
-        }
-      }
-      i = j;
+  /// Głębokość snu 0 (czuwanie) … 1 (głęboki) na minutę — do „fali” w stylu Sleep Cycle.
+  /// Łączy fazę z wygładzoną aktywnością, żeby krzywa była płynna jak oddech nocy.
+  static List<double> depthCurve(List<MinuteSample> ms) {
+    if (ms.isEmpty) return [];
+    final a = activity(ms);
+    final raw = <double>[];
+    for (var i = 0; i < ms.length; i++) {
+      final base = switch (ms[i].stage) {
+        Stage.wake => 0.04,
+        Stage.rem => 0.38,
+        Stage.light => 0.58,
+        Stage.deep => 0.92,
+      };
+      final act = (log(a[i] + 0.2) + 0.9) / 3.1; // ~0..1
+      raw.add((base - 0.12 * act.clamp(0.0, 1.0)).clamp(0.0, 1.0));
     }
+    // wygładzenie gaussowskie σ≈3 min
+    const k = [0.05, 0.12, 0.2, 0.26, 0.2, 0.12, 0.05];
+    return List.generate(raw.length, (i) {
+      var acc = 0.0, ws = 0.0;
+      for (var j = 0; j < k.length; j++) {
+        final x = i + j - 3;
+        if (x < 0 || x >= raw.length) continue;
+        acc += raw[x] * k[j];
+        ws += k[j];
+      }
+      return acc / ws;
+    });
   }
 
   /// Czy w ostatnich minutach śpiący jest w lekkim śnie / się wierci (inteligentny budzik).

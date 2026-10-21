@@ -220,7 +220,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ]),
         ),
         const SizedBox(height: 16),
-        const Center(child: Text('Bąkometr 1.0', style: TextStyle(color: C.muted, fontSize: 12))),
+        const Center(child: Text('Nocny Licznik 2.0', style: TextStyle(color: C.muted, fontSize: 12))),
       ],
     );
   }

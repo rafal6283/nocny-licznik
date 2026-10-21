@@ -1,3 +1,4 @@
+import 'dart:math';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -26,6 +27,7 @@ class _NightDetailScreenState extends State<NightDetailScreen> {
   List<MinuteSample> ms = [];
   List<SoundEvent> evs = [];
   SoundType? filter = SoundType.fart;
+  bool stepView = false;
   final player = AudioPlayer();
   int? playingId;
   final noteCtl = TextEditingController();
@@ -141,6 +143,60 @@ class _NightDetailScreenState extends State<NightDetailScreen> {
     if (mounted) Navigator.pop(context);
   }
 
+  Widget _breathingCard(Night night) {
+    final idx = night.apneaIndex;
+    final color = idx < 5 ? C.gas : (idx < 15 ? C.moon : C.danger);
+    final enough = night.durationMin >= 120;
+    return Section(
+      title: 'Oddech w nocy 🫁',
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
+          Text(idx.toStringAsFixed(1),
+              style: TextStyle(fontSize: 36, fontWeight: FontWeight.w800, color: color, height: 1)),
+          const SizedBox(width: 8),
+          const Padding(
+            padding: EdgeInsets.only(bottom: 4),
+            child: Text('przerw / godz. snu', style: TextStyle(color: C.muted)),
+          ),
+        ]),
+        const SizedBox(height: 6),
+        Text(
+          enough
+              ? 'Wskaźnik ${apneaCategory(idx)} · ${night.apneaCount} '
+                  '${plural(night.apneaCount, 'przerwa', 'przerwy', 'przerw')} ≥10 s zakończonych westchnieniem lub chrapnięciem'
+              : 'Za krótka noc na wiarygodny wskaźnik (potrzeba min. 2 h snu).',
+          style: const TextStyle(fontSize: 13),
+        ),
+        const SizedBox(height: 10),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(6),
+          child: SizedBox(
+            height: 8,
+            child: Row(children: [
+              Expanded(flex: 5, child: Container(color: C.gas.withValues(alpha: 0.8))),
+              Expanded(flex: 10, child: Container(color: C.moon.withValues(alpha: 0.8))),
+              Expanded(flex: 15, child: Container(color: C.wake.withValues(alpha: 0.8))),
+              Expanded(flex: 10, child: Container(color: C.danger.withValues(alpha: 0.8))),
+            ]),
+          ),
+        ),
+        LayoutBuilder(
+          builder: (c, b) => Padding(
+            padding: EdgeInsets.only(
+                left: (b.maxWidth * min(idx, 40.0) / 40 - 6).clamp(0.0, max(0.0, b.maxWidth - 12)).toDouble()),
+            child: Icon(Icons.arrow_drop_up, color: color, size: 18),
+          ),
+        ),
+        const Text(
+          'To orientacyjne wskazanie na podstawie dźwięku, nie diagnoza. Wykrywane są głównie przerwy u osób, '
+          'które chrapią. Jeśli wskaźnik często przekracza 15, ktoś zauważa u Ciebie przerwy w oddychaniu albo '
+          'budzisz się niewyspany — porozmawiaj z lekarzem o badaniu snu (poligrafia/polisomnografia).',
+          style: TextStyle(fontSize: 11, color: C.muted),
+        ),
+      ]),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final night = n;
@@ -198,13 +254,37 @@ class _NightDetailScreenState extends State<NightDetailScreen> {
               StageBar(n: night),
             ]),
           ),
-          const SizedBox(height: 12),
-          Section(title: 'Fazy snu', child: Hypnogram(minutes: ms)),
+          if (night.micBlockedMin > 0) ...[
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(color: const Color(0xFF3A2A10), borderRadius: BorderRadius.circular(16)),
+              child: Text(
+                '⚠️ Przez ${durHM(night.micBlockedMin)} mikrofon był zajęty przez inną aplikację — '
+                'w tym czasie dźwięki (wiatry, chrapanie, oddech) nie były liczone.',
+                style: const TextStyle(color: C.moon, fontSize: 13),
+              ),
+            ),
+          ],
           const SizedBox(height: 12),
           Section(
-            title: 'Dźwięki w nocy',
-            child: EventTimeline(start: night.start, end: end, events: evs, minutes: ms),
+            title: 'Wykres snu',
+            trailing: SegmentedButton<bool>(
+              showSelectedIcon: false,
+              style: const ButtonStyle(visualDensity: VisualDensity.compact),
+              segments: const [
+                ButtonSegment(value: false, label: Text('Fala')),
+                ButtonSegment(value: true, label: Text('Fazy')),
+              ],
+              selected: {stepView},
+              onSelectionChanged: (v) => setState(() => stepView = v.first),
+            ),
+            child: stepView
+                ? Hypnogram(minutes: ms)
+                : SleepWaveGraph(minutes: ms, events: evs, start: night.start, end: end),
           ),
+          const SizedBox(height: 12),
+          _breathingCard(night),
           const SizedBox(height: 12),
           TileGrid(columns: 3, children: [
             StatTile(label: 'Zasypianie', value: durHM(night.latencyMin)),
@@ -212,6 +292,8 @@ class _NightDetailScreenState extends State<NightDetailScreen> {
             StatTile(label: 'Chrapanie', value: durHM(night.snoreMin), color: C.light),
             StatTile(label: 'Mówienie', value: '${night.talkCount}', color: C.rem),
             StatTile(label: 'Kaszel', value: '${night.coughCount}', color: C.wake),
+            StatTile(label: 'Przerwy w oddechu', value: '${night.apneaCount}', color: C.danger),
+            StatTile(label: 'Efektywność', value: '${night.inBedMin > 0 ? (night.durationMin * 100 / night.inBedMin).round() : 0}%'),
             StatTile(
               label: 'Światło',
               value: night.avgLux != null ? luxLabel(night.avgLux) : (night.lightManual.isEmpty ? '—' : '✋'),

@@ -37,19 +37,22 @@ jobs:
       - name: Katalogi platform
         run: PLATFORMS=android bash tool/prepare_platforms.sh
       - run: flutter pub get
-      - run: flutter analyze --no-fatal-infos --no-fatal-warnings
+      - name: Analiza kodu
+        run: |
+          set -o pipefail
+          flutter analyze --no-fatal-infos --no-fatal-warnings 2>&1 | tee build.log
       - name: APK
         run: |
           set -o pipefail
           flutter build apk --release 2>&1 | tee build.log
-          cp build/app/outputs/flutter-apk/app-release.apk bakometr.apk
+          cp build/app/outputs/flutter-apk/app-release.apk nocny-licznik.apk
       - name: Błędy kompilacji jako adnotacje
         if: failure()
         run: bash tool/annotate_errors.sh build.log
       - uses: actions/upload-artifact@v4
         with:
           name: bakometr-android
-          path: bakometr.apk
+          path: nocny-licznik.apk
 
   ios:
     runs-on: macos-latest
@@ -81,11 +84,11 @@ jobs:
         run: |
           mkdir -p Payload
           cp -R build/ios/iphoneos/Runner.app Payload/
-          zip -qr bakometr.ipa Payload
+          zip -qr nocny-licznik.ipa Payload
       - uses: actions/upload-artifact@v4
         with:
           name: bakometr-ios
-          path: bakometr.ipa
+          path: nocny-licznik.ipa
 
   release:
     needs: [android, ios]
@@ -99,10 +102,10 @@ jobs:
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: build-${{ github.run_number }}
-          name: Bąkometr build ${{ github.run_number }}
+          name: Nocny Licznik build ${{ github.run_number }}
           body: |
             Automatyczny build z `${{ github.sha }}`.
-            - **Android:** pobierz `bakometr.apk` i zainstaluj.
-            - **iPhone:** `bakometr.ipa` (niepodpisany) — wgraj przez Sideloadly/AltStore z darmowym Apple ID.
+            - **Android:** pobierz `nocny-licznik.apk` i zainstaluj.
+            - **iPhone:** `nocny-licznik.ipa` (niepodpisany) — wgraj przez Sideloadly/AltStore z darmowym Apple ID.
           files: out/*
           make_latest: true

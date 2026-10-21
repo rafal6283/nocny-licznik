@@ -49,7 +49,16 @@ class _Pending {
   double conf;
   final DateTime ts;
   final bool withClip;
-  _Pending(this.type, this.startSample, this.endSample, this.conf, this.ts, this.withClip);
+  final int maxLen;
+  _Pending(this.type, this.startSample, this.endSample, this.conf, this.ts, this.withClip, this.maxLen);
+}
+
+/// Kandydat na przerwę w oddechu: cisza po słyszalnym oddychaniu, czekamy na dźwięk wznowienia.
+class _ApneaCandidate {
+  final int gapStart;
+  final int gapEnd;
+  final int deadline;
+  _ApneaCandidate(this.gapStart, this.gapEnd, this.deadline);
 }
 
 /// Serce aplikacji: nasłuch, ruch, światło, detekcja, fazy snu i budzik.
@@ -59,7 +68,7 @@ class NightEngine extends ChangeNotifier {
 
   static const _sr = SoundClassifier.sampleRate;
   static const _hop = _sr ~/ 2; // analiza co 0,5 s
-  static const _ringLen = _sr * 12; // bufor 12 s na klipy
+  static const _ringLen = _sr * 45; // bufor 45 s na klipy (przerwy w oddechu bywają długie)
   static const _preRoll = _sr * 3 ~/ 2;
   static const _postRoll = _sr * 3 ~/ 2;
   static const _maxClip = _sr * 8;
@@ -68,7 +77,11 @@ class NightEngine extends ChangeNotifier {
     SoundType.snore: 12,
     SoundType.talk: 40,
     SoundType.cough: 30,
+    SoundType.apnea: 60,
   };
+  // Bezdech: cisza ≥10 s (definicja AASM: ustanie przepływu ≥10 s), maks. 2 min.
+  static const _apneaMinSec = 10;
+  static const _apneaMaxSec = 120;
 
   final Settings _s = Settings.instance;
 
@@ -82,6 +95,8 @@ class NightEngine extends ChangeNotifier {
   int snoreHitsTotal = 0;
   int talks = 0;
   int coughs = 0;
+  int apneas = 0;
+  bool micBlocked = false;
   double? lastLux;
   double levelDb = -90;
   double noiseFloorDb = -60;
@@ -114,6 +129,14 @@ class NightEngine extends ChangeNotifier {
   bool _hasCarry = false;
   bool _classifying = false;
   bool _luxFresh = false;
+  // Bezdech
+  int _lastLoudSample = 0;
+  double _gapMotion = 0;
+  final List<int> _breathSamples = [];
+  _ApneaCandidate? _apneaCand;
+  // Zajęty mikrofon (cyfrowe zera)
+  int _zeroHops = 0;
+  int _blockedHops = 0;
 
   // Minuta
   double _minMotion = 0;
@@ -121,6 +144,8 @@ class NightEngine extends ChangeNotifier {
   int _minNoiseN = 0;
   int _minFarts = 0;
   bool _minSnore = false;
+  int _minApneas = 0;
+  int _minSounds = 0;
   int _minuteIdx = 0;
 
   // Ruch
@@ -175,7 +200,7 @@ class NightEngine extends ChangeNotifier {
     state = NightState.tracking;
     notifyListeners();
 
-    await BakometrNative.startTracking(title: 'Bąkometr nasłuchuje', text: 'Dobranoc 🌙');
+    await BakometrNative.startTracking(title: 'Nocny Licznik nasłuchuje', text: 'Dobranoc 🌙');
     if (_s.keepScreenOn) await BakometrNative.setKeepScreenOn(true);
 
     // Model ładujemy raz; jeśli go brak, noc i tak się nagrywa (ruch, światło, głośność).
@@ -227,7 +252,7 @@ class NightEngine extends ChangeNotifier {
         id: 900,
         at: plan.alarmAt!.add(const Duration(minutes: 1)),
         title: 'Pobudka! ⏰',
-        body: 'Budzik Bąkometru — aplikacja została zamknięta w nocy.',
+        body: 'Budzik Nocnego Licznika — aplikacja została zamknięta w nocy.',
       );
     }
     notifyListeners();
@@ -239,6 +264,14 @@ class NightEngine extends ChangeNotifier {
     snoreHitsTotal = 0;
     talks = 0;
     coughs = 0;
+    apneas = 0;
+    micBlocked = false;
+    _lastLoudSample = 0;
+    _gapMotion = 0;
+    _breathSamples.clear();
+    _apneaCand = null;
+    _zeroHops = 0;
+    _blockedHops = 0;
     lastLux = null;
     levelDb = -90;
     noiseFloorDb = -60;
@@ -267,6 +300,8 @@ class NightEngine extends ChangeNotifier {
     _minNoiseN = 0;
     _minFarts = 0;
     _minSnore = false;
+    _minApneas = 0;
+    _minSounds = 0;
   }
 
   // =====================================================================
@@ -319,7 +354,28 @@ class NightEngine extends ChangeNotifier {
 
     _finalizePending();
 
+    // --- Zajęty mikrofon: inna aplikacja nagrywa, my dostajemy idealne zera ---
+    final digitalZero = rms < 1e-6;
+    if (digitalZero) {
+      _zeroHops++;
+      if (micBlocked) _blockedHops++;
+      if (!micBlocked && _zeroHops >= 240 && state == NightState.tracking) {
+        micBlocked = true;
+        _blockedHops += _zeroHops;
+        BakometrNative.updateTracking('⚠️ Mikrofon zajęty przez inną aplikację — dźwięki nie są liczone');
+        notifyListeners();
+      }
+    } else {
+      _zeroHops = 0;
+      if (micBlocked) {
+        micBlocked = false;
+        BakometrNative.updateTracking('💨 ${fartsLabel(farts)} · ${durHM(elapsed.inMinutes)}');
+        notifyListeners();
+      }
+    }
+
     final muted = _muteUntil != null && now.isBefore(_muteUntil!);
+    _trackApnea(db, muted || digitalZero);
     final loudEnough = db > noiseFloorDb + 5 || _recentSnore(now);
     if (analysisActive && !muted && state == NightState.tracking && loudEnough && _clf != null &&
         _total >= SoundClassifier.windowLen && !_classifying) {
@@ -348,6 +404,14 @@ class NightEngine extends ChangeNotifier {
       if (s.snore >= _thr(_s.snoreSensitivity, 0.15, 0.6)) _hit(SoundType.snore, s.snore, now, gapMs: 60000);
       if (_s.detectTalk && s.speech >= 0.6) _hit(SoundType.talk, s.speech, now, gapMs: 10000);
       if (_s.detectCough && s.cough >= 0.45) _hit(SoundType.cough, s.cough, now, gapMs: 3000);
+
+      // Słyszalny oddech/chrapanie — warunek wstępny przerwy w oddechu.
+      if (s.snore >= 0.2 || s.breathing >= 0.25 || s.snort >= 0.2) _breathSamples.add(_total);
+      final cand = _apneaCand;
+      if (cand != null && _total <= cand.deadline && s.recovery >= 0.15) {
+        _apneaCand = null;
+        _apneaHit(cand, s.recovery, now);
+      }
     } catch (e) {
       classifierError = 'Błąd analizy: $e';
     } finally {
@@ -382,19 +446,55 @@ class NightEngine extends ChangeNotifier {
         _minFarts++;
       case SoundType.talk:
         talks++;
+        _minSounds++;
       case SoundType.cough:
         coughs++;
+        _minSounds++;
       case SoundType.snore:
+      case SoundType.apnea:
         break;
     }
     final saved = _clipsSaved[t] ?? 0;
     final withClip = _s.recordClips && saved < (_clipLimits[t] ?? 20);
     // Okno YAMNet obejmuje ~1 s wstecz.
     final startSample = max(0, _total - SoundClassifier.windowLen - _preRoll);
-    _pending.add(_Pending(t, startSample, _total, conf, now, withClip));
+    _pending.add(_Pending(t, startSample, _total, conf, now, withClip, _maxClip));
     if (t == SoundType.fart) {
       BakometrNative.updateTracking('💨 ${fartsLabel(farts)} · ${durHM(elapsed.inMinutes)}');
     }
+  }
+
+  /// Wykrywanie przerw w oddechu (wzorzec „chrapanie → cisza ≥10 s → głośne wznowienie”),
+  /// jak w metodach opartych na dźwiękach po bezdechu (post-apnea sounds).
+  void _trackApnea(double db, bool ignore) {
+    final cand = _apneaCand;
+    if (cand != null && _total > cand.deadline) _apneaCand = null;
+    _breathSamples.removeWhere((x) => _total - x > _sr * 180);
+
+    final loud = db > noiseFloorDb + 6;
+    if (!loud) return;
+    final gapSec = (_total - _lastLoudSample) / _sr;
+    final asleep = analysisActive && state == NightState.tracking && !ignore;
+    if (asleep && gapSec >= _apneaMinSec && gapSec <= _apneaMaxSec && _gapMotion < 2.5) {
+      // Przed ciszą musiało być słychać oddech/chrapanie — inaczej to zwykła cisza w pokoju.
+      final before = _breathSamples.where((x) => x <= _lastLoudSample && _lastLoudSample - x <= _sr * 60).length;
+      if (before >= 3) {
+        _apneaCand = _ApneaCandidate(_lastLoudSample, _total, _total + _sr * 4);
+      }
+    }
+    _lastLoudSample = _total;
+    _gapMotion = 0;
+  }
+
+  void _apneaHit(_ApneaCandidate c, double conf, DateTime now) {
+    apneas++;
+    _minApneas++;
+    final saved = _clipsSaved[SoundType.apnea] ?? 0;
+    final withClip = _s.recordClips && saved < (_clipLimits[SoundType.apnea] ?? 60);
+    final gapSec = (c.gapEnd - c.gapStart) / _sr;
+    final ts = now.subtract(Duration(milliseconds: (gapSec * 1000).round()));
+    _pending.add(_Pending(SoundType.apnea, max(0, c.gapStart - _sr * 3), _total, conf, ts, withClip, _sr * 40));
+    notifyListeners();
   }
 
   void _maybeNudge(DateTime now) {
@@ -411,7 +511,7 @@ class NightEngine extends ChangeNotifier {
   }
 
   void _finalizePending() {
-    final ready = _pending.where((e) => _total >= e.endSample + _postRoll || _total - e.startSample > _maxClip).toList();
+    final ready = _pending.where((e) => _total >= e.endSample + _postRoll || _total - e.startSample > e.maxLen).toList();
     for (final e in ready) {
       _pending.remove(e);
       _saveEvent(e);
@@ -424,7 +524,7 @@ class NightEngine extends ChangeNotifier {
     String? clip;
     final end = min(_total, e.endSample + _postRoll);
     final start = max(e.startSample, max(0, _total - _ringLen + 1));
-    final len = min(end - start, _maxClip);
+    final len = min(end - start, e.maxLen);
     if (e.withClip && len > _sr ~/ 2 && _clipDir != null) {
       final pcm = Int16List(len);
       for (var i = 0; i < len; i++) {
@@ -458,7 +558,10 @@ class NightEngine extends ChangeNotifier {
       final d = sqrt(pow(e.x - _ax!, 2) + pow(e.y - _ay!, 2) + pow(e.z - _az!, 2));
       final muted = _muteUntil != null && DateTime.now().isBefore(_muteUntil!);
       // Drobny szum czujnika pomijamy.
-      if (d > 0.08 && !muted && state == NightState.tracking) _minMotion += d;
+      if (d > 0.08 && !muted && state == NightState.tracking) {
+        _minMotion += d;
+        _gapMotion += d;
+      }
       // Potrząśnięcia (wyłączanie budzika)
       if (d > 12 && onShake != null) {
         final now = DateTime.now();
@@ -509,6 +612,8 @@ class NightEngine extends ChangeNotifier {
       lux: (canLuxInBackground || _luxFresh) ? lastLux : null,
       farts: _minFarts,
       snore: _minSnore,
+      apneas: _minApneas,
+      sounds: _minSounds,
     );
     _luxFresh = false;
     _resetMinute();
@@ -632,6 +737,7 @@ class NightEngine extends ChangeNotifier {
 
     final n = night!;
     n.end = DateTime.now();
+    n.micBlockedMin = _blockedHops ~/ 120;
     await summarize(n, minutes, liveEvents);
 
     state = NightState.idle;
@@ -655,6 +761,8 @@ class NightEngine extends ChangeNotifier {
     n.fartCount = evs.where((e) => e.type == SoundType.fart && e.counts).length;
     n.talkCount = evs.where((e) => e.type == SoundType.talk && e.counts).length;
     n.coughCount = evs.where((e) => e.type == SoundType.cough && e.counts).length;
+    n.apneaCount = evs.where((e) => e.type == SoundType.apnea && e.counts).length;
+    n.apneaIndex = sum.sleepMin >= 60 ? n.apneaCount / (sum.sleepMin / 60.0) : 0;
     n.snoreMin = ms.where((m) => m.snore).length;
     final lux = ms.map((m) => m.lux).whereType<double>().toList();
     if (lux.isNotEmpty) {

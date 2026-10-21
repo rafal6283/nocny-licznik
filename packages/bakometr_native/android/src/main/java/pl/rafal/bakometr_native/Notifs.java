@@ -22,7 +22,7 @@ final class Notifs {
 
         NotificationChannel tracking = new NotificationChannel(
                 CH_TRACKING, "Śledzenie snu", NotificationManager.IMPORTANCE_LOW);
-        tracking.setDescription("Widoczne, gdy Bąkometr nasłuchuje w nocy");
+        tracking.setDescription("Widoczne, gdy Nocny Licznik nasłuchuje w nocy");
         tracking.setShowBadge(false);
         nm.createNotificationChannel(tracking);
 
@@ -33,7 +33,7 @@ final class Notifs {
 
         NotificationChannel alarm = new NotificationChannel(
                 CH_ALARM, "Budzik", NotificationManager.IMPORTANCE_HIGH);
-        alarm.setDescription("Budzik Bąkometru");
+        alarm.setDescription("Budzik Nocnego Licznika");
         alarm.setBypassDnd(true);
         alarm.setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM),
                 new AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ALARM).build());

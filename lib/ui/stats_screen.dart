@@ -212,6 +212,26 @@ class _StatsScreenState extends State<StatsScreen> {
         ),
         const SizedBox(height: 12),
         Section(
+          title: 'Przerwy w oddechu 🫁 (na godzinę snu)',
+          trailing: Text('norma < 5', style: const TextStyle(color: C.muted, fontSize: 12)),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            BarSeriesChart(
+              values: nights.map((n) => n.apneaIndex).toList(),
+              labels: labels,
+              color: C.danger,
+              height: 120,
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Średnio ${avg(nights.where((n) => n.durationMin >= 120).map((n) => n.apneaIndex)).toStringAsFixed(1)}/h — '
+              '${apneaCategory(avg(nights.where((n) => n.durationMin >= 120).map((n) => n.apneaIndex)))}. '
+              'Orientacyjnie, nie diagnoza.',
+              style: const TextStyle(fontSize: 12, color: C.muted),
+            ),
+          ]),
+        ),
+        const SizedBox(height: 12),
+        Section(
           title: 'Chrapanie',
           child: BarSeriesChart(
             values: nights.map((n) => n.snoreMin.toDouble()).toList(),

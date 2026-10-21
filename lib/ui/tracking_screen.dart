@@ -112,7 +112,7 @@ class _TrackingScreenState extends State<TrackingScreen> {
             const SizedBox(width: 8),
             _pill('💬 ${e.talks}', C.rem),
             const SizedBox(width: 8),
-            _pill('🤧 ${e.coughs}', C.wake),
+            _pill('🫁 ${e.apneas}', C.danger),
             const SizedBox(width: 8),
             _pill('☀️ ${luxLabel(e.lastLux)}', C.moon),
           ]),
@@ -135,6 +135,15 @@ class _TrackingScreenState extends State<TrackingScreen> {
                   textAlign: TextAlign.center, style: const TextStyle(fontSize: 12, color: C.muted)),
           ],
           const Spacer(),
+          if (e.micBlocked)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Text(
+                '⚠️ Mikrofon zajęty przez inną aplikację (np. inny tracker snu). Dźwięki nie są teraz liczone.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: C.moon),
+              ),
+            ),
           if (e.lastError != null)
             Padding(
               padding: const EdgeInsets.only(bottom: 8),

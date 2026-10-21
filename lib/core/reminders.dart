@@ -18,7 +18,7 @@ class Reminders {
       id: bedtimeId,
       at: at,
       title: 'Czas do łóżka 🌙',
-      body: 'Odłóż telefon obok poduszki i uruchom Bąkometr.',
+      body: 'Odłóż telefon obok poduszki i uruchom Nocny Licznik.',
       daily: true,
     );
   }

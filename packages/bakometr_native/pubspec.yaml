@@ -1,5 +1,5 @@
 name: bakometr_native
-description: Natywne funkcje Bąkometru (usługa w tle, czujnik światła, wibracje, powiadomienia, budzik).
+description: Natywne funkcje Nocnego Licznika (usługa w tle, czujnik światła, wibracje, powiadomienia, budzik).
 version: 1.0.0
 publish_to: 'none'
 

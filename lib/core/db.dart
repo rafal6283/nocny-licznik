@@ -17,7 +17,16 @@ class Db {
     final dir = await getDatabasesPath();
     return openDatabase(
       p.join(dir, 'bakometr.db'),
-      version: 1,
+      version: 2,
+      onUpgrade: (db, from, to) async {
+        if (from < 2) {
+          await db.execute('ALTER TABLE nights ADD COLUMN apnea_count INTEGER');
+          await db.execute('ALTER TABLE nights ADD COLUMN apnea_index REAL');
+          await db.execute('ALTER TABLE nights ADD COLUMN mic_blocked_min INTEGER');
+          await db.execute('ALTER TABLE minutes ADD COLUMN apneas INTEGER');
+          await db.execute('ALTER TABLE minutes ADD COLUMN sounds INTEGER');
+        }
+      },
       onCreate: (db, v) async {
         await db.execute('''
           CREATE TABLE nights(
@@ -43,6 +52,9 @@ class Db {
             snore_min INTEGER,
             talk_count INTEGER,
             cough_count INTEGER,
+            apnea_count INTEGER,
+            apnea_index REAL,
+            mic_blocked_min INTEGER,
             avg_lux REAL,
             max_lux REAL
           )''');
@@ -67,6 +79,8 @@ class Db {
             lux REAL,
             farts INTEGER,
             snore INTEGER,
+            apneas INTEGER,
+            sounds INTEGER,
             stage INTEGER,
             PRIMARY KEY(night_id, idx)
           )''');

@@ -98,6 +98,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
                       style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: C.gas)),
                   if (isRecord) const Text('🏆 rekord', style: TextStyle(fontSize: 11, color: C.moon)),
                   if (n.snoreMin > 0) Text('😴 ${durHM(n.snoreMin)}', style: const TextStyle(fontSize: 11, color: C.muted)),
+                  if (n.apneaIndex >= 5)
+                    Text('🫁 ${n.apneaIndex.toStringAsFixed(1)}/h', style: const TextStyle(fontSize: 11, color: C.danger)),
                 ]),
               ]),
             ),
