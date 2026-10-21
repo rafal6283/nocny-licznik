@@ -126,31 +126,31 @@ class SleepAnalysis {
     ].map((r) => r.map((v) => log(v)).toList()).toList();
 
     // Viterbi
-    final score = List.generate(n, (_) => List<double>.filled(4, -1e18));
+    final vit = List.generate(n, (_) => List<double>.filled(4, -1e18));
     final back = List.generate(n, (_) => List<int>.filled(4, 0));
     const init = [0.85, 0.01, 0.13, 0.01];
     for (var k = 0; k < 4; k++) {
-      score[0][k] = log(init[k]) + emis[0][k];
+      vit[0][k] = log(init[k]) + emis[0][k];
     }
     for (var i = 1; i < n; i++) {
       for (var k = 0; k < 4; k++) {
         var best = -1e18;
         var arg = 0;
         for (var j = 0; j < 4; j++) {
-          final v = score[i - 1][j] + tr[j][k];
+          final v = vit[i - 1][j] + tr[j][k];
           if (v > best) {
             best = v;
             arg = j;
           }
         }
-        score[i][k] = best + emis[i][k];
+        vit[i][k] = best + emis[i][k];
         back[i][k] = arg;
       }
     }
     final path = List<int>.filled(n, 0);
     var last = 0;
     for (var k = 1; k < 4; k++) {
-      if (score[n - 1][k] > score[n - 1][last]) last = k;
+      if (vit[n - 1][k] > vit[n - 1][last]) last = k;
     }
     path[n - 1] = last;
     for (var i = n - 1; i > 0; i--) {
