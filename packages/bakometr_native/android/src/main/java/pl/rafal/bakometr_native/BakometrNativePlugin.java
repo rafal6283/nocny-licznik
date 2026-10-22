@@ -31,6 +31,8 @@ public class BakometrNativePlugin implements FlutterPlugin, MethodChannel.Method
     private MethodChannel channel;
     private Context ctx;
     private Activity activity;
+    private ActivityPluginBinding activityBinding;
+    private HealthSync health;
     private String trackingTitle = "Nocny Licznik nasłuchuje";
     private final Handler main = new Handler(Looper.getMainLooper());
 
@@ -40,6 +42,7 @@ public class BakometrNativePlugin implements FlutterPlugin, MethodChannel.Method
         channel = new MethodChannel(binding.getBinaryMessenger(), "bakometr_native");
         channel.setMethodCallHandler(this);
         Notifs.ensureChannels(ctx);
+        health = new HealthSync(ctx);
     }
 
     @Override
@@ -49,6 +52,7 @@ public class BakometrNativePlugin implements FlutterPlugin, MethodChannel.Method
 
     @Override
     public void onMethodCall(@NonNull MethodCall call, @NonNull MethodChannel.Result result) {
+        if (health != null && health.handle(call, result, activity)) return;
         switch (call.method) {
             case "startTracking": {
                 String title = call.argument("title");
@@ -202,21 +206,33 @@ public class BakometrNativePlugin implements FlutterPlugin, MethodChannel.Method
     // --- ActivityAware ---
     @Override
     public void onAttachedToActivity(@NonNull ActivityPluginBinding binding) {
+        attach(binding);
+    }
+
+    private void attach(ActivityPluginBinding binding) {
         activity = binding.getActivity();
+        activityBinding = binding;
+        if (health != null) binding.addActivityResultListener(health);
+    }
+
+    private void detach() {
+        if (activityBinding != null && health != null) activityBinding.removeActivityResultListener(health);
+        activityBinding = null;
+        activity = null;
     }
 
     @Override
     public void onDetachedFromActivityForConfigChanges() {
-        activity = null;
+        detach();
     }
 
     @Override
     public void onReattachedToActivityForConfigChanges(@NonNull ActivityPluginBinding binding) {
-        activity = binding.getActivity();
+        attach(binding);
     }
 
     @Override
     public void onDetachedFromActivity() {
-        activity = null;
+        detach();
     }
 }

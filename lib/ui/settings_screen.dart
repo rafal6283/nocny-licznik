@@ -1,9 +1,11 @@
+import 'package:bakometr_native/bakometr_native.dart';
 import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../core/db.dart';
 import '../core/exchange_export.dart';
 import '../core/fmt.dart';
+import '../core/health_sync.dart';
 import '../core/reminders.dart';
 import '../core/settings.dart';
 import 'theme.dart';
@@ -95,6 +97,36 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
       ),
     );
+  }
+
+  void _snack(String t) {
+    if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t)));
+  }
+
+  Future<void> _setHealthConnect(bool on) async {
+    if (!on) {
+      s.healthConnect = false;
+      return;
+    }
+    final status = await BakometrNative.healthConnectStatus();
+    if (status == 'unavailable') {
+      _snack('Health Connect nie jest dostępne na tym telefonie');
+      return;
+    }
+    final ok = await BakometrNative.healthConnectRequestPermission();
+    if (!ok) {
+      _snack(status == 'update'
+          ? 'Zainstaluj lub zaktualizuj Health Connect ze Sklepu Play i włącz ponownie'
+          : 'Bez zgody na zapis snu w Health Connect nie da się tego włączyć');
+      return;
+    }
+    s.healthConnect = true;
+    await _pushAll();
+  }
+
+  Future<void> _pushAll() async {
+    final n = await HealthSync.pushAll();
+    _snack(n < 0 ? 'Nie udało się zapisać nocy w Health Connect' : 'Zapisano w Health Connect nocy: $n');
   }
 
   @override
@@ -232,6 +264,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 }
               },
             ),
+            if (HealthSync.supported) ...[
+              SwitchListTile(
+                secondary: const Icon(Icons.favorite_border),
+                title: const Text('Zapisuj sen w Health Connect'),
+                subtitle: const Text('Każda noc z fazami snu trafi do Health Connect – zobaczą ją np. Life Cycle i Fitbit'),
+                value: s.healthConnect,
+                onChanged: _setHealthConnect,
+              ),
+              if (s.healthConnect)
+                ListTile(
+                  leading: const Icon(Icons.sync),
+                  title: const Text('Wyślij wszystkie noce teraz'),
+                  subtitle: const Text('Ponowny zapis aktualizuje noce, nie tworzy duplikatów'),
+                  onTap: _pushAll,
+                ),
+            ],
             ListTile(
               leading: const Icon(Icons.ios_share),
               title: const Text('Eksport wiatrów do Kreski'),
@@ -248,7 +296,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             const ListTile(
               leading: Icon(Icons.lock_outline),
               title: Text('Prywatność'),
-              subtitle: Text('Wszystko zostaje na telefonie. Rozpoznawanie dźwięków (model YAMNet) działa offline.'),
+              subtitle: Text('Wszystko zostaje na telefonie (poza nocami, które sam zapiszesz w Health Connect). Rozpoznawanie dźwięków (model YAMNet) działa offline.'),
             ),
           ]),
         ),

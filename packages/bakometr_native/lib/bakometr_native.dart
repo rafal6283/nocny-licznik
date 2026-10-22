@@ -67,6 +67,44 @@ class BakometrNative {
   static Future<void> setKeepScreenOn(bool on) =>
       _safe(() => _ch.invokeMethod('setKeepScreenOn', {'on': on}));
 
+  // --- Health Connect (tylko Android) ---
+
+  /// 'available' | 'update' (trzeba zainstalować/zaktualizować Health Connect) | 'unavailable'
+  static Future<String> healthConnectStatus() async {
+    try {
+      return await _ch.invokeMethod<String>('hcStatus') ?? 'unavailable';
+    } catch (_) {
+      return 'unavailable';
+    }
+  }
+
+  static Future<bool> healthConnectHasPermission() async {
+    try {
+      return await _ch.invokeMethod<bool>('hcHasPermission') ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Prosi o zgodę na zapis snu; przy 'update' otwiera Sklep Play. true = zgoda jest.
+  static Future<bool> healthConnectRequestPermission() async {
+    try {
+      return await _ch.invokeMethod<bool>('hcRequestPermission') ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Zapisuje noce jako sesje snu. Każda: id, start, end (ms), title, notes,
+  /// stages: [{start, end, stage: wake|light|deep|rem}]. Zwraca liczbę zapisanych lub -1.
+  static Future<int> healthConnectWriteSleep(List<Map<String, Object?>> nights) async {
+    try {
+      return await _ch.invokeMethod<int>('hcWriteSleep', {'nights': nights}) ?? -1;
+    } catch (_) {
+      return -1;
+    }
+  }
+
   static Future<void> _safe(Future<dynamic> Function() f) async {
     try {
       await f();

@@ -98,6 +98,10 @@ class Settings extends ChangeNotifier {
   set bedtimeMinute(int v) => _set('bedMinute', v);
   int get delayStartMin => _i('delayStart', 0);
   set delayStartMin(int v) => _set('delayStart', v);
+  /// Zapis każdej nocy do Health Connect (Android).
+  bool get healthConnect => _b('healthConnect', false);
+  set healthConnect(bool v) => _set('healthConnect', v);
+
   bool get keepScreenOn => _b('keepScreenOn', false);
   set keepScreenOn(bool v) => _set('keepScreenOn', v);
 

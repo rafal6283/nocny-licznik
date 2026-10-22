@@ -15,6 +15,7 @@ import '../core/audio_synth.dart';
 import '../core/bus.dart';
 import '../core/db.dart';
 import '../core/fmt.dart';
+import '../core/health_sync.dart';
 import '../core/models.dart';
 import '../core/settings.dart';
 import 'classifier.dart';
@@ -785,6 +786,7 @@ class NightEngine extends ChangeNotifier {
     await Db.instance.updateNight(n);
     if (n.id != null && ms.isNotEmpty) await Db.instance.saveStages(n.id!, ms);
     dataChanged();
+    unawaited(HealthSync.pushNight(n, ms));
   }
 
   /// Przy starcie aplikacji: domyka noce przerwane przez system (np. ubicie procesu).

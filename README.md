@@ -19,6 +19,8 @@ Nocny monitor snu na Android i iOS w stylu Sleep Cycle / Sleep as Android — z 
 - **Kołysanki** — biały/różowy/brązowy szum, deszcz, fale, wentylator (generowane w aplikacji) z wygaszaniem
 - **Hałas otoczenia** — równoważny poziom dźwięku (Leq) i szczyty co minutę, w dB, z kalibracją mikrofonu i odniesieniem do zaleceń WHO (~30 dB w sypialni)
 - **Statystyki jak w Sleep Cycle** — Dni/Tygodnie/Miesiące/Wszystko: jakość snu, regularność, pora snu, pobudka, czas w łóżku, sen, zaśnięcie po, wiatry, chrapanie, kaszel, światło, hałas, przerwy w oddechu; ekran „Więcej” z podsumowaniem i listą nocy
+- **Health Connect** (Android) — każda noc z fazami snu zapisuje się w Health Connect, skąd czytają ją inne aplikacje (np. Life Cycle); włączasz w Ustawieniach → Dane
+- **Eksport do Kreski** — plik z wiatrami do porównania z ręcznymi wpisami FF
 - Dodatkowo: godzina szczytu wiatrów, rekordy, wpływ tagów, światło i hałas a sen
 
 Wszystkie dane i nagrania zostają na telefonie.
