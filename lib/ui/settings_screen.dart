@@ -158,6 +158,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
             _choice<int>('Pomiar światła (Android)', s.luxIntervalSec,
                 {30: 'co 30 s', 60: 'co 1 min', 300: 'co 5 min'}, (v) => s.luxIntervalSec = v),
+            ListTile(
+              title: Text('Kalibracja hałasu: ${s.micOffset >= 92 ? '+' : ''}${(s.micOffset - 92).round()} dB'),
+              subtitle: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Slider(
+                  value: s.micOffset,
+                  min: 72,
+                  max: 112,
+                  divisions: 40,
+                  label: '${(s.micOffset - 92).round()} dB',
+                  onChanged: (v) => s.micOffset = v,
+                ),
+                const Text(
+                  'Mikrofony telefonów różnią się czułością. Jeśli w cichej sypialni pokazuje się wyraźnie więcej '
+                  'niż ~25–30 dB, przesuń w lewo; jeśli mniej — w prawo. Działa też wstecz dla zapisanych nocy.',
+                  style: TextStyle(fontSize: 11, color: C.muted),
+                ),
+              ]),
+            ),
           ]),
         ),
 
@@ -220,7 +238,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ]),
         ),
         const SizedBox(height: 16),
-        const Center(child: Text('Nocny Licznik 2.0', style: TextStyle(color: C.muted, fontSize: 12))),
+        const Center(child: Text('Nocny Licznik 2.1', style: TextStyle(color: C.muted, fontSize: 12))),
       ],
     );
   }

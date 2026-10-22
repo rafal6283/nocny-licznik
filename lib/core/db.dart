@@ -17,7 +17,7 @@ class Db {
     final dir = await getDatabasesPath();
     return openDatabase(
       p.join(dir, 'bakometr.db'),
-      version: 2,
+      version: 3,
       onUpgrade: (db, from, to) async {
         if (from < 2) {
           await db.execute('ALTER TABLE nights ADD COLUMN apnea_count INTEGER');
@@ -25,6 +25,15 @@ class Db {
           await db.execute('ALTER TABLE nights ADD COLUMN mic_blocked_min INTEGER');
           await db.execute('ALTER TABLE minutes ADD COLUMN apneas INTEGER');
           await db.execute('ALTER TABLE minutes ADD COLUMN sounds INTEGER');
+        }
+        if (from < 3) {
+          await db.execute('ALTER TABLE nights ADD COLUMN avg_noise REAL');
+          await db.execute('ALTER TABLE nights ADD COLUMN max_noise REAL');
+          await db.execute('ALTER TABLE minutes ADD COLUMN noise_max REAL');
+          // Uzupełnienie starszych nocy z zapisanych minut
+          await db.execute('''UPDATE nights SET
+              avg_noise = (SELECT AVG(noise_db) FROM minutes WHERE minutes.night_id = nights.id AND noise_db > -120),
+              max_noise = (SELECT MAX(noise_db) FROM minutes WHERE minutes.night_id = nights.id)''');
         }
       },
       onCreate: (db, v) async {
@@ -55,6 +64,8 @@ class Db {
             apnea_count INTEGER,
             apnea_index REAL,
             mic_blocked_min INTEGER,
+            avg_noise REAL,
+            max_noise REAL,
             avg_lux REAL,
             max_lux REAL
           )''');
@@ -76,6 +87,7 @@ class Db {
             ts INTEGER NOT NULL,
             motion REAL,
             noise_db REAL,
+            noise_max REAL,
             lux REAL,
             farts INTEGER,
             snore INTEGER,

@@ -60,6 +60,8 @@ class Night {
   int apneaCount;
   double apneaIndex; // przerwy w oddechu na godzinę snu
   int micBlockedMin; // minuty, gdy mikrofon dawał cyfrową ciszę (zajęty)
+  double? avgNoise; // hałas otoczenia: Leq nocy w dBFS (dB SPL = + kalibracja)
+  double? maxNoise; // najgłośniejsze 0,5 s nocy w dBFS
   double? avgLux;
   double? maxLux;
 
@@ -89,6 +91,8 @@ class Night {
     this.apneaCount = 0,
     this.apneaIndex = 0,
     this.micBlockedMin = 0,
+    this.avgNoise,
+    this.maxNoise,
     this.avgLux,
     this.maxLux,
   }) : tags = tags ?? [];
@@ -121,6 +125,8 @@ class Night {
         'apnea_count': apneaCount,
         'apnea_index': apneaIndex,
         'mic_blocked_min': micBlockedMin,
+        'avg_noise': avgNoise,
+        'max_noise': maxNoise,
         'avg_lux': avgLux,
         'max_lux': maxLux,
       };
@@ -153,6 +159,8 @@ class Night {
         apneaCount: (m['apnea_count'] as int?) ?? 0,
         apneaIndex: (m['apnea_index'] as num?)?.toDouble() ?? 0,
         micBlockedMin: (m['mic_blocked_min'] as int?) ?? 0,
+        avgNoise: (m['avg_noise'] as num?)?.toDouble(),
+        maxNoise: (m['max_noise'] as num?)?.toDouble(),
         avgLux: (m['avg_lux'] as num?)?.toDouble(),
         maxLux: (m['max_lux'] as num?)?.toDouble(),
       );
@@ -211,7 +219,8 @@ class MinuteSample {
   final int idx;
   final DateTime ts;
   final double motion;
-  final double noiseDb;
+  final double noiseDb; // Leq minuty w dBFS
+  final double? noiseMax; // najgłośniejsze 0,5 s minuty w dBFS
   final double? lux;
   final int farts;
   final bool snore;
@@ -224,6 +233,7 @@ class MinuteSample {
     required this.ts,
     required this.motion,
     required this.noiseDb,
+    this.noiseMax,
     this.lux,
     this.farts = 0,
     this.snore = false,
@@ -238,6 +248,7 @@ class MinuteSample {
         'ts': ts.millisecondsSinceEpoch,
         'motion': motion,
         'noise_db': noiseDb,
+        'noise_max': noiseMax,
         'lux': lux,
         'farts': farts,
         'snore': snore ? 1 : 0,
@@ -251,6 +262,7 @@ class MinuteSample {
         ts: DateTime.fromMillisecondsSinceEpoch(m['ts'] as int),
         motion: (m['motion'] as num).toDouble(),
         noiseDb: (m['noise_db'] as num).toDouble(),
+        noiseMax: (m['noise_max'] as num?)?.toDouble(),
         lux: (m['lux'] as num?)?.toDouble(),
         farts: (m['farts'] as int?) ?? 0,
         snore: (m['snore'] as int?) == 1,

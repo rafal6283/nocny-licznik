@@ -143,6 +143,38 @@ class _NightDetailScreenState extends State<NightDetailScreen> {
     if (mounted) Navigator.pop(context);
   }
 
+  Widget _noiseCard(Night night) {
+    final s = Settings.instance;
+    final pts = ms.where((m) => m.noiseDb > -120).toList();
+    final avgSpl = s.spl(night.avgNoise!);
+    final maxSpl = night.maxNoise != null ? s.spl(night.maxNoise!) : null;
+    final loud = pts.where((m) => s.spl(m.noiseDb) > 35).length;
+    return Section(
+      title: 'Hałas w sypialni 🔊',
+      trailing: Text('śr. ${avgSpl.round()} dB${maxSpl != null ? ' · maks. ${maxSpl.round()} dB' : ''}',
+          style: const TextStyle(color: C.muted, fontSize: 12)),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        LineSeriesChart(
+          values: [for (final m in pts) s.spl(m.noiseDb)],
+          labels: [for (final m in pts) hhmm(m.ts)],
+          color: const Color(0xFF3DDC97),
+          zeroBased: false,
+          fmt: (v) => '${v.round()} dB',
+        ),
+        const SizedBox(height: 6),
+        Text(
+          avgSpl <= 30
+              ? 'Cicho — średni poziom w zaleceniach WHO dla sypialni (do ok. 30 dB).'
+              : 'Głośniej niż zalecane dla sypialni (WHO: ok. 30 dB). '
+                  'Powyżej 35 dB przez ${durHM(loud)}.',
+          style: const TextStyle(fontSize: 12),
+        ),
+        const Text('Pomiar mikrofonem telefonu — orientacyjny; kalibrację zmienisz w Ustawieniach.',
+            style: TextStyle(fontSize: 11, color: C.muted)),
+      ]),
+    );
+  }
+
   Widget _breathingCard(Night night) {
     final idx = night.apneaIndex;
     final color = idx < 5 ? C.gas : (idx < 15 ? C.moon : C.danger);
@@ -295,6 +327,11 @@ class _NightDetailScreenState extends State<NightDetailScreen> {
             StatTile(label: 'Przerwy w oddechu', value: '${night.apneaCount}', color: C.danger),
             StatTile(label: 'Efektywność', value: '${night.inBedMin > 0 ? (night.durationMin * 100 / night.inBedMin).round() : 0}%'),
             StatTile(
+              label: 'Hałas śr.',
+              value: night.avgNoise != null ? '${Settings.instance.spl(night.avgNoise!).round()} dB' : '—',
+              color: const Color(0xFF3DDC97),
+            ),
+            StatTile(
               label: 'Światło',
               value: night.avgLux != null ? luxLabel(night.avgLux) : (night.lightManual.isEmpty ? '—' : '✋'),
               sub: night.avgLux != null ? luxWord(night.avgLux) : lightBucketLabel(night.lightManual),
@@ -313,6 +350,10 @@ class _NightDetailScreenState extends State<NightDetailScreen> {
               ),
             ),
           if (hasLux) const SizedBox(height: 12),
+          if (night.avgNoise != null) ...[
+            _noiseCard(night),
+            const SizedBox(height: 12),
+          ],
           if (farts.isNotEmpty)
             Section(
               title: 'Godzina szczytu',

@@ -79,6 +79,11 @@ class Settings extends ChangeNotifier {
   set recordClips(bool v) => _set('recordClips', v);
   bool get antiSnore => _b('antiSnore', false);
   set antiSnore(bool v) => _set('antiSnore', v);
+  /// Kalibracja mikrofonu: dB SPL = dBFS + przesunięcie. Typowe telefony: 90–100.
+  double get micOffset => _d('micOffset', 92);
+  set micOffset(double v) => _set('micOffset', v);
+  double spl(double dbfs) => (dbfs + micOffset).clamp(0, 140).toDouble();
+
   int get luxIntervalSec => _i('luxInterval', 60);
   set luxIntervalSec(int v) => _set('luxInterval', v);
 

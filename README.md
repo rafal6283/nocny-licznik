@@ -17,7 +17,9 @@ Nocny monitor snu na Android i iOS w stylu Sleep Cycle / Sleep as Android — z 
 - **Tagi nocy** (#fasola, #piwo, #kawa…) i porównanie, co daje najwięcej wiatrów i najgorszy sen
 - **Dług snu, cel snu, przypomnienie o pójściu spać**
 - **Kołysanki** — biały/różowy/brązowy szum, deszcz, fale, wentylator (generowane w aplikacji) z wygaszaniem
-- Statystyki: godzina szczytu, rekordy, trendy, światło a sen
+- **Hałas otoczenia** — równoważny poziom dźwięku (Leq) i szczyty co minutę, w dB, z kalibracją mikrofonu i odniesieniem do zaleceń WHO (~30 dB w sypialni)
+- **Statystyki jak w Sleep Cycle** — Dni/Tygodnie/Miesiące/Wszystko: jakość snu, regularność, pora snu, pobudka, czas w łóżku, sen, zaśnięcie po, wiatry, chrapanie, kaszel, światło, hałas, przerwy w oddechu; ekran „Więcej” z podsumowaniem i listą nocy
+- Dodatkowo: godzina szczytu wiatrów, rekordy, wpływ tagów, światło i hałas a sen
 
 Wszystkie dane i nagrania zostają na telefonie.
 

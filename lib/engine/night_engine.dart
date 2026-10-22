@@ -140,7 +140,8 @@ class NightEngine extends ChangeNotifier {
 
   // Minuta
   double _minMotion = 0;
-  double _minNoiseSum = 0;
+  double _minNoiseSum = 0; // suma mocy (rms²) — do Leq
+  double _minNoiseMax = -200;
   int _minNoiseN = 0;
   int _minFarts = 0;
   bool _minSnore = false;
@@ -297,6 +298,7 @@ class NightEngine extends ChangeNotifier {
   void _resetMinute() {
     _minMotion = 0;
     _minNoiseSum = 0;
+    _minNoiseMax = -200;
     _minNoiseN = 0;
     _minFarts = 0;
     _minSnore = false;
@@ -344,8 +346,12 @@ class NightEngine extends ChangeNotifier {
     levelDb = db;
     // Poziom tła: szybko w dół, bardzo powoli w górę.
     noiseFloorDb = db < noiseFloorDb ? noiseFloorDb * 0.7 + db * 0.3 : noiseFloorDb + (db - noiseFloorDb) * 0.004;
-    _minNoiseSum += db;
-    _minNoiseN++;
+    // Hałas otoczenia: energia (Leq) i szczyt minuty; cyfrowej ciszy (zajęty mikrofon) nie liczymy.
+    if (rms >= 1e-6) {
+      _minNoiseSum += rms * rms;
+      _minNoiseN++;
+      if (db > _minNoiseMax) _minNoiseMax = db;
+    }
 
     final now = DateTime.now();
     if (!analysisActive && analysisFrom != null && !now.isBefore(analysisFrom!) && !lullabyPlaying) {
@@ -606,7 +612,8 @@ class NightEngine extends ChangeNotifier {
       idx: _minuteIdx++,
       ts: DateTime.now(),
       motion: _minMotion,
-      noiseDb: _minNoiseN > 0 ? _minNoiseSum / _minNoiseN : -90,
+      noiseDb: _minNoiseN > 0 ? 10 * log(_minNoiseSum / _minNoiseN + 1e-18) / ln10 : -200,
+      noiseMax: _minNoiseN > 0 ? _minNoiseMax : null,
       // Na iOS światło znamy tylko z pomiarów na pierwszym planie — zapisujemy je
       // w minucie pomiaru zamiast powielać jedną wartość przez całą noc.
       lux: (canLuxInBackground || _luxFresh) ? lastLux : null,
@@ -764,6 +771,12 @@ class NightEngine extends ChangeNotifier {
     n.apneaCount = evs.where((e) => e.type == SoundType.apnea && e.counts).length;
     n.apneaIndex = sum.sleepMin >= 60 ? n.apneaCount / (sum.sleepMin / 60.0) : 0;
     n.snoreMin = ms.where((m) => m.snore).length;
+    final noise = ms.where((m) => m.noiseDb > -120).toList();
+    if (noise.isNotEmpty) {
+      final p = noise.map((m) => pow(10, m.noiseDb / 10)).reduce((a, b) => a + b) / noise.length;
+      n.avgNoise = 10 * log(p) / ln10;
+      n.maxNoise = noise.map((m) => m.noiseMax ?? m.noiseDb).reduce(max);
+    }
     final lux = ms.map((m) => m.lux).whereType<double>().toList();
     if (lux.isNotEmpty) {
       n.avgLux = lux.reduce((a, b) => a + b) / lux.length;

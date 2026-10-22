@@ -330,6 +330,8 @@ class LineSeriesChart extends StatelessWidget {
   final bool logScale;
   final double? goal;
   final bool showAverage;
+  final String Function(double)? fmt;
+  final bool zeroBased;
   const LineSeriesChart({
     super.key,
     required this.values,
@@ -340,13 +342,16 @@ class LineSeriesChart extends StatelessWidget {
     this.logScale = false,
     this.goal,
     this.showAverage = true,
+    this.fmt,
+    this.zeroBased = true,
   });
 
   @override
   Widget build(BuildContext context) => SizedBox(
       height: height,
       child: CustomPaint(
-          painter: _LinePainter(values, labels, color, unit, logScale, goal, showAverage), size: Size.infinite));
+          painter: _LinePainter(values, labels, color, unit, logScale, goal, showAverage, fmt, zeroBased),
+          size: Size.infinite));
 }
 
 class _LinePainter extends CustomPainter {
@@ -357,13 +362,16 @@ class _LinePainter extends CustomPainter {
   final bool logScale;
   final double? goal;
   final bool showAvg;
-  _LinePainter(this.v, this.labels, this.color, this.unit, this.logScale, this.goal, this.showAvg);
+  final String Function(double)? customFmt;
+  final bool zeroBased;
+  _LinePainter(this.v, this.labels, this.color, this.unit, this.logScale, this.goal, this.showAvg, this.customFmt,
+      this.zeroBased);
 
   /// Skala logarytmiczna przydaje się dla luksów (0,1 … 500 lx).
   double _t(double x) => logScale ? (x <= 0 ? 0 : log(x + 1) / ln10) : x;
   double _inv(double y) => logScale ? (pow(10, y) - 1).toDouble() : y;
 
-  String _fmt(double x) => x >= 10 ? x.round().toString() : x.toStringAsFixed(1);
+  String _fmt(double x) => customFmt != null ? customFmt!(x) : (x >= 10 ? x.round().toString() : x.toStringAsFixed(1));
 
   @override
   void paint(Canvas c, Size size) {
@@ -372,7 +380,7 @@ class _LinePainter extends CustomPainter {
       _text(c, 'Brak danych', Offset(size.width / 2, size.height / 2 - 6), center: true);
       return;
     }
-    const left = 32.0;
+    final left = customFmt != null ? 44.0 : 32.0;
     final r = Rect.fromLTWH(left, 10, size.width - left - 6, size.height - 30);
     var hi = pts.map(_t).reduce(max);
     var lo = pts.map(_t).reduce(min);
@@ -380,7 +388,15 @@ class _LinePainter extends CustomPainter {
       hi = max(hi, _t(goal!));
       lo = min(lo, _t(goal!));
     }
-    lo = logScale ? 0 : min(0, lo);
+    if (logScale) {
+      lo = 0;
+    } else if (zeroBased) {
+      lo = min(0, lo);
+    } else {
+      final pad = max((hi - lo) * 0.15, 1.0);
+      lo -= pad;
+      hi += pad * 0.2;
+    }
     if (hi - lo <= 0) hi = lo + 1;
     hi += (hi - lo) * 0.12;
     double yOf(double val) => r.bottom - r.height * (_t(val) - lo) / (hi - lo);
@@ -459,7 +475,7 @@ class _LinePainter extends CustomPainter {
           Paint()
             ..color = C.text.withValues(alpha: 0.35)
             ..strokeWidth = 1);
-      _text(c, 'śr. ${_fmt(avg)}$unit', Offset(r.right - 2, y - 14),
+      _text(c, 'śr. ${_fmt(avg)}${customFmt != null ? '' : unit}', Offset(r.right - 2, y - 14),
           right: true, style: const TextStyle(fontSize: 10, color: C.text));
     }
 
@@ -483,6 +499,7 @@ class BarSeriesChart extends StatelessWidget {
   final double height;
   final int? highlight;
   final bool showAverage;
+  final String Function(double)? fmt;
   const BarSeriesChart({
     super.key,
     required this.values,
@@ -491,12 +508,13 @@ class BarSeriesChart extends StatelessWidget {
     this.height = 150,
     this.highlight,
     this.showAverage = true,
+    this.fmt,
   });
 
   @override
   Widget build(BuildContext context) => SizedBox(
       height: height,
-      child: CustomPaint(painter: _BarPainter(values, labels, color, highlight, showAverage), size: Size.infinite));
+      child: CustomPaint(painter: _BarPainter(values, labels, color, highlight, showAverage, fmt), size: Size.infinite));
 }
 
 class _BarPainter extends CustomPainter {
@@ -505,9 +523,12 @@ class _BarPainter extends CustomPainter {
   final Color color;
   final int? hl;
   final bool showAvg;
-  _BarPainter(this.v, this.labels, this.color, this.hl, this.showAvg);
+  final String Function(double)? customFmt;
+  _BarPainter(this.v, this.labels, this.color, this.hl, this.showAvg, this.customFmt);
 
-  String _fmt(double x) => x >= 10 || x == x.roundToDouble() ? x.round().toString() : x.toStringAsFixed(1);
+  String _fmt(double x) => customFmt != null
+      ? customFmt!(x)
+      : (x >= 10 || x == x.roundToDouble() ? x.round().toString() : x.toStringAsFixed(1));
 
   @override
   void paint(Canvas c, Size size) {

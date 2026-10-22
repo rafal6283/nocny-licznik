@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../core/fmt.dart';
 import '../core/models.dart';
+import '../core/settings.dart';
 import '../engine/night_engine.dart';
 import 'theme.dart';
 
@@ -107,7 +108,7 @@ class _TrackingScreenState extends State<TrackingScreen> {
           Text('💨 ${plural(e.farts, 'bąk', 'bąki', 'bąków')} tej nocy',
               textAlign: TextAlign.center, style: const TextStyle(color: C.gas)),
           const SizedBox(height: 24),
-          Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+          Wrap(alignment: WrapAlignment.center, runSpacing: 8, children: [
             _pill(snoringNow ? '😴 chrapanie' : '😴 cisza', snoringNow ? C.light : C.muted),
             const SizedBox(width: 8),
             _pill('💬 ${e.talks}', C.rem),
@@ -115,6 +116,8 @@ class _TrackingScreenState extends State<TrackingScreen> {
             _pill('🫁 ${e.apneas}', C.danger),
             const SizedBox(width: 8),
             _pill('☀️ ${luxLabel(e.lastLux)}', C.moon),
+            const SizedBox(width: 8),
+            _pill('🔊 ${Settings.instance.spl(e.levelDb).round()} dB', const Color(0xFF3DDC97)),
           ]),
           const SizedBox(height: 18),
           ClipRRect(

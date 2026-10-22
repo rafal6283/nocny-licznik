@@ -41,10 +41,10 @@ class SleepAnalysis {
       }
     } else {
       // Brak ruchu (telefon nie leży na łóżku) — zastępczo z głośności otoczenia.
-      final noise = ms.map((m) => m.noiseDb).toList();
+      final noise = ms.map((m) => max(m.noiseDb, -100.0)).toList();
       final med = _median(noise);
       for (final m in ms) {
-        base.add(max(0.0, (m.noiseDb - med) / 3.0) + m.farts * 0.3);
+        base.add(max(0.0, (max(m.noiseDb, -100.0) - med) / 3.0) + m.farts * 0.3);
       }
     }
     const w = [0.15, 0.15, 0.3, 0.6, 1.0, 0.5, 0.25]; // przesunięcia -4..+2

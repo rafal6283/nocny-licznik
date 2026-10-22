@@ -3,12 +3,15 @@ import 'package:flutter/material.dart';
 import '../core/bus.dart';
 import '../core/db.dart';
 import '../core/fmt.dart';
+import '../core/metrics.dart';
 import '../core/models.dart';
 import '../core/settings.dart';
 import '../core/stats_util.dart';
 import 'charts.dart';
+import 'metric_detail_screen.dart';
 import 'theme.dart';
 
+/// Statystyki w układzie Sleep Cycle: zakładki okresu i karta na każdą miarę z „Więcej ›”.
 class StatsScreen extends StatefulWidget {
   const StatsScreen({super.key});
 
@@ -17,22 +20,28 @@ class StatsScreen extends StatefulWidget {
 }
 
 class _StatsScreenState extends State<StatsScreen> {
-  List<Night> all = [];
+  List<Night> chrono = [];
   List<SoundEvent> fartEvents = [];
-  int range = 30; // 7, 30, 0 = wszystkie
+  Period period = Period.days;
   bool loaded = false;
 
   @override
   void initState() {
     super.initState();
     dataVersion.addListener(_load);
+    Settings.instance.addListener(_refresh);
     _load();
   }
 
   @override
   void dispose() {
     dataVersion.removeListener(_load);
+    Settings.instance.removeListener(_refresh);
     super.dispose();
+  }
+
+  void _refresh() {
+    if (mounted) setState(() {});
   }
 
   Future<void> _load() async {
@@ -40,51 +49,136 @@ class _StatsScreenState extends State<StatsScreen> {
     final f = await Db.instance.allEvents(SoundType.fart);
     if (mounted) {
       setState(() {
-        all = n;
+        chrono = n.reversed.toList();
         fartEvents = f.where((e) => e.counts).toList();
         loaded = true;
       });
     }
   }
 
+  List<Night> _rangeNights() {
+    switch (period) {
+      case Period.days:
+        return chrono.length > 14 ? chrono.sublist(chrono.length - 14) : chrono;
+      case Period.weeks:
+        final from = DateTime.now().subtract(const Duration(days: 84));
+        return chrono.where((n) => n.start.isAfter(from)).toList();
+      case Period.months:
+        final now = DateTime.now();
+        return chrono.where((n) => n.start.isAfter(DateTime(now.year - 1, now.month, now.day))).toList();
+      case Period.all:
+        return chrono;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     if (!loaded) return const Center(child: CircularProgressIndicator());
-    final nights = (range == 0 ? all : all.take(range).toList()).reversed.toList(); // chronologicznie
-    final goal = Settings.instance.sleepGoalMin;
-
-    final header = Row(children: [
-      Expanded(
-        child: Text('Statystyki', style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700)),
-      ),
-      SegmentedButton<int>(
-        showSelectedIcon: false,
-        segments: const [
-          ButtonSegment(value: 7, label: Text('7')),
-          ButtonSegment(value: 30, label: Text('30')),
-          ButtonSegment(value: 0, label: Text('Wszystkie')),
-        ],
-        selected: {range},
-        onSelectionChanged: (v) => setState(() => range = v.first),
-      ),
-    ]);
-
-    if (nights.isEmpty) {
+    final title = Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Text('Statystyki',
+          style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w800)),
+    );
+    if (chrono.isEmpty) {
       return ListView(padding: const EdgeInsets.all(16), children: [
-        header,
+        title,
+        PeriodTabs(value: period, onChanged: (p) => setState(() => period = p)),
         const SizedBox(height: 60),
         const Text('Statystyki pojawią się po pierwszej nocy.',
             textAlign: TextAlign.center, style: TextStyle(color: C.muted)),
       ]);
     }
 
+    final metrics = buildMetrics(regularityScores(chrono));
+    final nights = _rangeNights();
+
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
+      children: [
+        title,
+        PeriodTabs(value: period, onChanged: (p) => setState(() => period = p)),
+        const SizedBox(height: 16),
+        for (final m in metrics) ...[
+          _metricCard(m),
+          const SizedBox(height: 12),
+        ],
+        ..._extras(nights),
+      ],
+    );
+  }
+
+  Widget _metricCard(Metric m) {
+    final pts = metricSeries(m, chrono, period);
+    final enough = chrono.where((n) => m.value(n) != null).length >= m.minNights;
+    final hasAny = pts.any((p) => p.value != null);
+    Widget body;
+    if (!enough) {
+      body = SizedBox(
+        height: 110,
+        child: Center(
+          child: Text('Ten wykres wymaga ${m.minNights} nocy danych.',
+              textAlign: TextAlign.center, style: const TextStyle(color: C.text, fontSize: 15)),
+        ),
+      );
+    } else if (!hasAny) {
+      body = const SizedBox(
+        height: 80,
+        child: Center(child: Text('Brak pomiarów w tym okresie.', style: TextStyle(color: C.muted))),
+      );
+    } else if (m.kind == ChartKind.bar) {
+      body = BarSeriesChart(
+        values: pts.map((p) => p.value ?? 0).toList(),
+        labels: pts.map((p) => p.label).toList(),
+        color: m.color,
+        height: 150,
+        fmt: m.fmt,
+      );
+    } else {
+      body = LineSeriesChart(
+        values: pts.map((p) => p.value).toList(),
+        labels: pts.map((p) => p.label).toList(),
+        color: m.color,
+        height: 150,
+        fmt: m.fmt,
+        zeroBased: m.zeroBased,
+      );
+    }
+
+    return Section(
+      title: m.title,
+      trailing: _moreButton(enough && hasAny
+          ? () => Navigator.push(context,
+              MaterialPageRoute(builder: (_) => MetricDetailScreen(metric: m, chrono: chrono, initial: period)))
+          : null),
+      child: body,
+    );
+  }
+
+  Widget _moreButton(VoidCallback? onTap) => Opacity(
+        opacity: onTap == null ? 0.35 : 1,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(14),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+            decoration: BoxDecoration(color: C.surface2, borderRadius: BorderRadius.circular(14)),
+            child: const Row(mainAxisSize: MainAxisSize.min, children: [
+              Text('Więcej', style: TextStyle(fontSize: 12, color: Color(0xFF5EC8F2), fontWeight: FontWeight.w600)),
+              Icon(Icons.chevron_right, size: 16, color: Color(0xFF5EC8F2)),
+            ]),
+          ),
+        ),
+      );
+
+  /// Sekcje własne Nocnego Licznika (pod statystykami w stylu Sleep Cycle).
+  List<Widget> _extras(List<Night> nights) {
+    if (nights.isEmpty) return [];
     final ids = nights.map((n) => n.id).toSet();
     final totalFarts = nights.fold<int>(0, (a, n) => a + n.fartCount);
     final record = nights.reduce((a, b) => a.fartCount >= b.fartCount ? a : b);
-    final debt = sleepDebtMin(all, goal);
-    final impacts = tagImpacts(nights).where((t) => t.nights >= 1).toList();
+    final debt = sleepDebtMin(chrono.reversed.toList(), Settings.instance.sleepGoalMin);
+    final impacts = tagImpacts(nights);
 
-    // Rozkład bąków wg godziny zegarowej (20:00 → 10:00)
     const hourOrder = [20, 21, 22, 23, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
     final byHour = List<double>.filled(hourOrder.length, 0);
     for (final e in fartEvents.where((e) => ids.contains(e.nightId))) {
@@ -96,152 +190,132 @@ class _StatsScreenState extends State<StatsScreen> {
       if (byHour[i] > byHour[peak]) peak = i;
     }
 
-    // Światło a sen
     final buckets = <String, List<Night>>{};
     for (final n in nights) {
       final b = lightBucket(n);
-      if (b.isEmpty) continue;
-      buckets.putIfAbsent(b, () => []).add(n);
+      if (b.isNotEmpty) buckets.putIfAbsent(b, () => []).add(n);
     }
+    final s = Settings.instance;
+    final noiseBuckets = <String, List<Night>>{};
+    for (final n in nights.where((n) => n.avgNoise != null)) {
+      final db = s.spl(n.avgNoise!);
+      final b = db <= 30 ? 'quiet' : (db <= 40 ? 'mid' : 'loud');
+      noiseBuckets.putIfAbsent(b, () => []).add(n);
+    }
+    const noiseLabels = {'quiet': 'Cicho (≤30 dB)', 'mid': 'Umiarkowanie (30–40 dB)', 'loud': 'Głośno (>40 dB)'};
 
-    final labels = [for (final n in nights) shortDate(n.start)];
+    Widget compareRow(String label, List<Night> ns) => Padding(
+          padding: const EdgeInsets.symmetric(vertical: 6),
+          child: Row(children: [
+            Expanded(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(label, style: const TextStyle(fontWeight: FontWeight.w700)),
+                Text('${ns.length} ${plural(ns.length, 'noc', 'noce', 'nocy')}',
+                    style: const TextStyle(fontSize: 12, color: C.muted)),
+              ]),
+            ),
+            _delta('${avg(ns.map((n) => n.score)).round()}%', C.text),
+            const SizedBox(width: 6),
+            _delta(durHM(avg(ns.map((n) => n.durationMin))), C.light),
+            const SizedBox(width: 6),
+            _delta('💨 ${avg(ns.map((n) => n.fartCount)).toStringAsFixed(1)}', C.gas),
+          ]),
+        );
 
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
-      children: [
-        header,
-        const SizedBox(height: 16),
-        TileGrid(columns: 3, children: [
-          StatTile(label: 'Średnio / noc', value: '💨 ${avg(nights.map((n) => n.fartCount)).toStringAsFixed(1)}', color: C.gas),
-          StatTile(label: 'Razem', value: '$totalFarts', sub: '${nights.length} nocy', color: C.gas),
-          StatTile(label: 'Rekord', value: '${record.fartCount}', sub: dayLabel(record.start), color: C.moon),
-          StatTile(label: 'Sen średnio', value: durHM(avg(nights.map((n) => n.durationMin)))),
-          StatTile(label: 'Ocena średnio', value: avg(nights.map((n) => n.score)).round().toString()),
-          StatTile(
-            label: debt >= 0 ? 'Dług snu' : 'Nadwyżka',
-            value: durHM(debt.abs()),
-            color: debt > 120 ? C.danger : C.gas,
-          ),
-        ]),
-        const SizedBox(height: 12),
-        Section(
-          title: 'Bąki w kolejnych nocach',
-          child: BarSeriesChart(values: nights.map((n) => n.fartCount.toDouble()).toList(), labels: labels),
+    return [
+      Padding(
+        padding: const EdgeInsets.fromLTRB(4, 12, 4, 10),
+        child: Text('Więcej o wiatrach i nawykach',
+            style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
+      ),
+      TileGrid(columns: 3, children: [
+        StatTile(label: 'Średnio / noc', value: '💨 ${avg(nights.map((n) => n.fartCount)).toStringAsFixed(1)}', color: C.gas),
+        StatTile(label: 'Razem', value: '$totalFarts', sub: '${nights.length} nocy', color: C.gas),
+        StatTile(label: 'Rekord', value: '${record.fartCount}', sub: dayLabel(nightDay(record)), color: C.moon),
+        StatTile(
+          label: debt >= 0 ? 'Dług snu (14 dni)' : 'Nadwyżka snu',
+          value: durHM(debt.abs()),
+          color: debt > 120 ? C.danger : C.gas,
         ),
-        const SizedBox(height: 12),
-        Section(
-          title: 'Długość snu',
-          trailing: Text('cel ${durHM(goal)}', style: const TextStyle(color: C.moon, fontSize: 12)),
-          child: LineSeriesChart(
-            values: nights.map((n) => n.durationMin / 60.0).toList(),
-            labels: labels,
-            color: C.light,
-            goal: goal / 60.0,
-          ),
+        StatTile(
+          label: 'Przerwy w oddechu',
+          value: '${avg(nights.where((n) => n.durationMin >= 120).map((n) => n.apneaIndex)).toStringAsFixed(1)}/h',
+          sub: apneaCategory(avg(nights.where((n) => n.durationMin >= 120).map((n) => n.apneaIndex))),
+          color: C.danger,
         ),
-        const SizedBox(height: 12),
-        Section(
-          title: 'Ocena snu',
-          child: LineSeriesChart(values: nights.map((n) => n.score.toDouble()).toList(), labels: labels, color: C.gas),
+        StatTile(
+          label: 'Hałas śr.',
+          value: nights.any((n) => n.avgNoise != null)
+              ? '${avg(nights.where((n) => n.avgNoise != null).map((n) => s.spl(n.avgNoise!))).round()} dB'
+              : '—',
+          color: const Color(0xFF3DDC97),
         ),
-        const SizedBox(height: 12),
-        Section(
-          title: 'O której najczęściej?',
-          trailing: byHour[peak] > 0
-              ? Text('szczyt ${two(hourOrder[peak])}:00', style: const TextStyle(color: C.gas, fontWeight: FontWeight.w700))
-              : null,
-          child: BarSeriesChart(values: byHour, labels: [for (final h in hourOrder) '$h'], highlight: byHour[peak] > 0 ? peak : null),
+      ]),
+      const SizedBox(height: 12),
+      Section(
+        title: 'O której najczęściej? 💨',
+        trailing: byHour[peak] > 0
+            ? Text('szczyt ${two(hourOrder[peak])}:00', style: const TextStyle(color: C.gas, fontWeight: FontWeight.w700))
+            : null,
+        child: BarSeriesChart(
+          values: byHour,
+          labels: [for (final h in hourOrder) '$h'],
+          highlight: byHour[peak] > 0 ? peak : null,
+          showAverage: false,
         ),
-        const SizedBox(height: 12),
-        Section(
-          title: 'Co wpływa na wynik? (tagi)',
-          child: impacts.isEmpty
-              ? const Text('Dodawaj tagi przed snem (#fasola, #piwo…), a tu zobaczysz, co daje najwięcej wiatrów.',
-                  style: TextStyle(color: C.muted))
-              : Column(children: [
-                  for (final t in impacts)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 6),
-                      child: Row(children: [
-                        Expanded(
-                          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                            Text('#${t.tag}', style: const TextStyle(fontWeight: FontWeight.w700)),
-                            Text('${t.nights} ${plural(t.nights, 'noc', 'noce', 'nocy')} · '
-                                '${t.fartsWith.toStringAsFixed(1)} vs ${t.fartsWithout.toStringAsFixed(1)} bąków',
-                                style: const TextStyle(fontSize: 12, color: C.muted)),
-                          ]),
-                        ),
-                        _delta('${t.fartDeltaPct >= 0 ? '+' : ''}${t.fartDeltaPct.round()}% 💨',
-                            t.fartDeltaPct > 10 ? C.danger : (t.fartDeltaPct < -10 ? C.gas : C.muted)),
-                        const SizedBox(width: 6),
-                        _delta('${t.scoreDelta >= 0 ? '+' : ''}${t.scoreDelta.round()} pkt',
-                            t.scoreDelta < -3 ? C.danger : (t.scoreDelta > 3 ? C.gas : C.muted)),
-                      ]),
-                    ),
-                  const SizedBox(height: 4),
-                  const Text('Porównanie średnich nocy z tagiem i bez — przy kilku nocach to jeszcze ciekawostka, nie nauka.',
-                      style: TextStyle(fontSize: 11, color: C.muted)),
-                ]),
-        ),
-        const SizedBox(height: 12),
-        Section(
-          title: 'Światło a sen',
-          child: buckets.isEmpty
-              ? const Text('Brak pomiarów światła — zmierz je albo zaznacz przed snem.', style: TextStyle(color: C.muted))
-              : Column(children: [
-                  for (final b in ['dark', 'dim', 'bright'])
-                    if (buckets[b] != null)
-                      Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 6),
-                        child: Row(children: [
-                          Expanded(
-                            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                              Text(lightBucketLabel(b), style: const TextStyle(fontWeight: FontWeight.w700)),
-                              Text('${buckets[b]!.length} ${plural(buckets[b]!.length, 'noc', 'noce', 'nocy')}',
-                                  style: const TextStyle(fontSize: 12, color: C.muted)),
-                            ]),
-                          ),
-                          _delta('ocena ${avg(buckets[b]!.map((n) => n.score)).round()}', C.text),
-                          const SizedBox(width: 6),
-                          _delta('${durHM(avg(buckets[b]!.map((n) => n.durationMin)))}', C.light),
-                          const SizedBox(width: 6),
-                          _delta('💨 ${avg(buckets[b]!.map((n) => n.fartCount)).toStringAsFixed(1)}', C.gas),
+      ),
+      const SizedBox(height: 12),
+      Section(
+        title: 'Co wpływa na wynik? (tagi)',
+        child: impacts.isEmpty
+            ? const Text('Dodawaj tagi przed snem (#fasola, #piwo…), a tu zobaczysz, co daje najwięcej wiatrów.',
+                style: TextStyle(color: C.muted))
+            : Column(children: [
+                for (final t in impacts)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 6),
+                    child: Row(children: [
+                      Expanded(
+                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          Text('#${t.tag}', style: const TextStyle(fontWeight: FontWeight.w700)),
+                          Text('${t.nights} ${plural(t.nights, 'noc', 'noce', 'nocy')} · '
+                              '${t.fartsWith.toStringAsFixed(1)} vs ${t.fartsWithout.toStringAsFixed(1)} bąków',
+                              style: const TextStyle(fontSize: 12, color: C.muted)),
                         ]),
                       ),
-                ]),
-        ),
-        const SizedBox(height: 12),
-        Section(
-          title: 'Przerwy w oddechu 🫁 (na godzinę snu)',
-          trailing: Text('norma < 5', style: const TextStyle(color: C.muted, fontSize: 12)),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            BarSeriesChart(
-              values: nights.map((n) => n.apneaIndex).toList(),
-              labels: labels,
-              color: C.danger,
-              height: 120,
-            ),
-            const SizedBox(height: 6),
-            Text(
-              'Średnio ${avg(nights.where((n) => n.durationMin >= 120).map((n) => n.apneaIndex)).toStringAsFixed(1)}/h — '
-              '${apneaCategory(avg(nights.where((n) => n.durationMin >= 120).map((n) => n.apneaIndex)))}. '
-              'Orientacyjnie, nie diagnoza.',
-              style: const TextStyle(fontSize: 12, color: C.muted),
-            ),
-          ]),
-        ),
-        const SizedBox(height: 12),
-        Section(
-          title: 'Chrapanie',
-          child: BarSeriesChart(
-            values: nights.map((n) => n.snoreMin.toDouble()).toList(),
-            labels: labels,
-            color: C.light,
-            height: 110,
-          ),
-        ),
-      ],
-    );
+                      _delta('${t.fartDeltaPct >= 0 ? '+' : ''}${t.fartDeltaPct.round()}% 💨',
+                          t.fartDeltaPct > 10 ? C.danger : (t.fartDeltaPct < -10 ? C.gas : C.muted)),
+                      const SizedBox(width: 6),
+                      _delta('${t.scoreDelta >= 0 ? '+' : ''}${t.scoreDelta.round()} pkt',
+                          t.scoreDelta < -3 ? C.danger : (t.scoreDelta > 3 ? C.gas : C.muted)),
+                    ]),
+                  ),
+                const SizedBox(height: 4),
+                const Text('Porównanie średnich nocy z tagiem i bez — przy kilku nocach to jeszcze ciekawostka, nie nauka.',
+                    style: TextStyle(fontSize: 11, color: C.muted)),
+              ]),
+      ),
+      const SizedBox(height: 12),
+      Section(
+        title: 'Światło a sen',
+        child: buckets.isEmpty
+            ? const Text('Brak pomiarów światła — zmierz je albo zaznacz przed snem.', style: TextStyle(color: C.muted))
+            : Column(children: [
+                for (final b in ['dark', 'dim', 'bright'])
+                  if (buckets[b] != null) compareRow(lightBucketLabel(b), buckets[b]!),
+              ]),
+      ),
+      const SizedBox(height: 12),
+      Section(
+        title: 'Hałas a sen',
+        child: noiseBuckets.isEmpty
+            ? const Text('Pomiar hałasu pojawi się po pierwszej nocy z nową wersją.', style: TextStyle(color: C.muted))
+            : Column(children: [
+                for (final b in ['quiet', 'mid', 'loud'])
+                  if (noiseBuckets[b] != null) compareRow(noiseLabels[b]!, noiseBuckets[b]!),
+              ]),
+      ),
+    ];
   }
 
   Widget _delta(String t, Color c) => Container(
