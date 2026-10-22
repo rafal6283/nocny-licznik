@@ -60,15 +60,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Future<void> _importCpap() async {
     try {
-      final r = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: const ['csv', 'txt'],
-        withData: true,
-      );
-      if (r == null || r.files.isEmpty) return;
-      final f = r.files.first;
-      final bytes = f.bytes ?? (f.path != null ? await File(f.path!).readAsBytes() : null);
-      if (bytes == null) throw 'nie można odczytać pliku';
+      final f = await FilePicker.pickFile(type: FileType.custom, allowedExtensions: const ['csv', 'txt']);
+      if (f == null) return;
+      final bytes = await f.readAsBytes();
       final days = CpapImport.parse(utf8.decode(bytes, allowMalformed: true));
       if (days.isEmpty) {
         _snack('Nie rozpoznano kolumn „Date” i „AHI” w pliku.');
@@ -130,10 +124,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
       ),
     );
-  }
-
-  void _snack(String t) {
-    if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t)));
   }
 
   Future<void> _setHealthConnect(bool on) async {

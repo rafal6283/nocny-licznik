@@ -146,9 +146,15 @@ def patch_ios():
     podfile = ROOT / "ios" / "Podfile"
     if podfile.exists():
         p = podfile.read_text()
-        p = re.sub(r"^#?\s*platform :ios, '[0-9.]+'", "platform :ios, '13.0'", p, flags=re.M)
+        p = re.sub(r"^#?\s*platform :ios, '[0-9.]+'", "platform :ios, '14.0'", p, flags=re.M)
         podfile.write_text(p)
-        log("Podfile: iOS 13")
+        log("Podfile: iOS 14")
+
+    pbx = ROOT / "ios" / "Runner.xcodeproj" / "project.pbxproj"
+    if pbx.exists():
+        t = re.sub(r"IPHONEOS_DEPLOYMENT_TARGET = [0-9.]+;", "IPHONEOS_DEPLOYMENT_TARGET = 14.0;", pbx.read_text())
+        pbx.write_text(t)
+        log("Xcode: iOS 14 (wymóg file_picker)")
 
     src = icon_source()
     iconset = runner / "Assets.xcassets" / "AppIcon.appiconset"
