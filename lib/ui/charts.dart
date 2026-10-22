@@ -72,7 +72,14 @@ class SleepWaveGraph extends StatefulWidget {
   final List<SoundEvent> events;
   final DateTime start;
   final DateTime end;
-  const SleepWaveGraph({super.key, required this.minutes, required this.events, required this.start, required this.end});
+  final bool showFarts;
+  const SleepWaveGraph(
+      {super.key,
+      required this.minutes,
+      required this.events,
+      required this.start,
+      required this.end,
+      this.showFarts = true});
 
   @override
   State<SleepWaveGraph> createState() => _SleepWaveGraphState();
@@ -109,7 +116,8 @@ class _SleepWaveGraphState extends State<SleepWaveGraph> {
       final i = (cursor! * (widget.minutes.length - 1)).round();
       final m = widget.minutes[i];
       label = '${hhmm(m.ts)} · ${m.stage.label}${m.snore ? ' · chrapanie' : ''}'
-          '${m.farts > 0 ? ' · 💨${m.farts}' : ''}${m.apneas > 0 ? ' · 🫁${m.apneas}' : ''}';
+          '${m.farts > 0 ? ' · 💨${m.farts}' : ''}${m.apneas > 0 ? ' · 🫁${m.apneas}' : ''}'
+          '${m.breathRate != null ? ' · ${m.breathRate!.round()} odd./min' : ''}';
     }
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       SizedBox(
@@ -130,7 +138,8 @@ class _SleepWaveGraphState extends State<SleepWaveGraph> {
             height: 240,
             width: box.maxWidth,
             child: CustomPaint(
-              painter: _WavePainter(depth, widget.minutes, widget.events, widget.start, widget.end, cursor),
+              painter: _WavePainter(depth, widget.minutes, widget.events, widget.start, widget.end, cursor,
+                  widget.showFarts),
             ),
           ),
         ),
@@ -146,7 +155,8 @@ class _WavePainter extends CustomPainter {
   final List<SoundEvent> evs;
   final DateTime start, end;
   final double? cursor;
-  _WavePainter(this.depth, this.ms, this.evs, this.start, this.end, this.cursor);
+  final bool showFarts;
+  _WavePainter(this.depth, this.ms, this.evs, this.start, this.end, this.cursor, this.showFarts);
 
   @override
   void paint(Canvas c, Size size) {
@@ -203,7 +213,7 @@ class _WavePainter extends CustomPainter {
     double xAt(DateTime t) => r.left + r.width * (t.difference(start).inSeconds / span).clamp(0.0, 1.0).toDouble();
     final lanes = [
       (SoundType.snore, '😴'),
-      (SoundType.fart, '💨'),
+      if (showFarts) (SoundType.fart, '💨'),
       (SoundType.apnea, '🫁'),
       (SoundType.talk, '💬'),
     ];
@@ -222,7 +232,10 @@ class _WavePainter extends CustomPainter {
               Paint()..color = col.withValues(alpha: 0.75));
         }
       } else {
-        for (final e in evs.where((e) => e.type == type || (type == SoundType.talk && e.type == SoundType.cough))) {
+        for (final e in evs.where((e) =>
+            e.type == type ||
+            (type == SoundType.talk && e.type == SoundType.cough) ||
+            (type == SoundType.apnea && e.type == SoundType.hypopnea))) {
           final x = xAt(e.ts);
           final p = Paint()..color = e.counts ? C.sound(e.type) : C.muted.withValues(alpha: 0.35);
           if (type == SoundType.apnea) {

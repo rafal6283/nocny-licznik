@@ -1,5 +1,5 @@
 /// Typy wykrywanych zdarzeń dźwiękowych.
-enum SoundType { fart, snore, talk, cough, apnea }
+enum SoundType { fart, snore, talk, cough, apnea, hypopnea }
 
 extension SoundTypeX on SoundType {
   String get label => switch (this) {
@@ -8,6 +8,7 @@ extension SoundTypeX on SoundType {
         SoundType.talk => 'Mówienie',
         SoundType.cough => 'Kaszel',
         SoundType.apnea => 'Przerwa w oddechu',
+        SoundType.hypopnea => 'Spłycenie oddechu',
       };
   String get emoji => switch (this) {
         SoundType.fart => '💨',
@@ -15,6 +16,7 @@ extension SoundTypeX on SoundType {
         SoundType.talk => '💬',
         SoundType.cough => '🤧',
         SoundType.apnea => '🫁',
+        SoundType.hypopnea => '〰️',
       };
   static SoundType parse(String s) =>
       SoundType.values.firstWhere((e) => e.name == s, orElse: () => SoundType.fart);
@@ -60,6 +62,13 @@ class Night {
   int apneaCount;
   double apneaIndex; // przerwy w oddechu na godzinę snu
   int micBlockedMin; // minuty, gdy mikrofon dawał cyfrową ciszę (zajęty)
+  int hypopneaCount; // spłycenia oddechu (tylko z sonaru)
+  bool cpap; // noc z aparatem CPAP
+  bool sonar; // noc z aktywnym sonarem
+  double? breathRate; // średnia częstość oddechu (sonar), oddechy/min
+  double? cpapAhi; // AHI odczytane z aparatu
+  double? cpapLeak; // nieszczelność maski z aparatu, l/min
+  int? cpapUsageMin; // czas użycia aparatu
   double? avgNoise; // hałas otoczenia: Leq nocy w dBFS (dB SPL = + kalibracja)
   double? maxNoise; // najgłośniejsze 0,5 s nocy w dBFS
   double? avgLux;
@@ -93,6 +102,13 @@ class Night {
     this.micBlockedMin = 0,
     this.avgNoise,
     this.maxNoise,
+    this.hypopneaCount = 0,
+    this.cpap = false,
+    this.sonar = false,
+    this.breathRate,
+    this.cpapAhi,
+    this.cpapLeak,
+    this.cpapUsageMin,
     this.avgLux,
     this.maxLux,
   }) : tags = tags ?? [];
@@ -126,6 +142,13 @@ class Night {
         'apnea_index': apneaIndex,
         'mic_blocked_min': micBlockedMin,
         'avg_noise': avgNoise,
+        'hypopnea_count': hypopneaCount,
+        'cpap': cpap ? 1 : 0,
+        'sonar': sonar ? 1 : 0,
+        'breath_rate': breathRate,
+        'cpap_ahi': cpapAhi,
+        'cpap_leak': cpapLeak,
+        'cpap_usage_min': cpapUsageMin,
         'max_noise': maxNoise,
         'avg_lux': avgLux,
         'max_lux': maxLux,
@@ -160,6 +183,13 @@ class Night {
         apneaIndex: (m['apnea_index'] as num?)?.toDouble() ?? 0,
         micBlockedMin: (m['mic_blocked_min'] as int?) ?? 0,
         avgNoise: (m['avg_noise'] as num?)?.toDouble(),
+        hypopneaCount: (m['hypopnea_count'] as int?) ?? 0,
+        cpap: (m['cpap'] as int?) == 1,
+        sonar: (m['sonar'] as int?) == 1,
+        breathRate: (m['breath_rate'] as num?)?.toDouble(),
+        cpapAhi: (m['cpap_ahi'] as num?)?.toDouble(),
+        cpapLeak: (m['cpap_leak'] as num?)?.toDouble(),
+        cpapUsageMin: m['cpap_usage_min'] as int?,
         maxNoise: (m['max_noise'] as num?)?.toDouble(),
         avgLux: (m['avg_lux'] as num?)?.toDouble(),
         maxLux: (m['max_lux'] as num?)?.toDouble(),
@@ -221,6 +251,9 @@ class MinuteSample {
   final double motion;
   final double noiseDb; // Leq minuty w dBFS
   final double? noiseMax; // najgłośniejsze 0,5 s minuty w dBFS
+  final double? breathRate; // sonar: oddechy/min
+  final double? breathVar; // sonar: zmienność odstępów między oddechami (CV)
+  final double? sonarMotion; // sonar: ruch ciała (względny)
   final double? lux;
   final int farts;
   final bool snore;
@@ -234,6 +267,9 @@ class MinuteSample {
     required this.motion,
     required this.noiseDb,
     this.noiseMax,
+    this.breathRate,
+    this.breathVar,
+    this.sonarMotion,
     this.lux,
     this.farts = 0,
     this.snore = false,
@@ -249,6 +285,9 @@ class MinuteSample {
         'motion': motion,
         'noise_db': noiseDb,
         'noise_max': noiseMax,
+        'breath_rate': breathRate,
+        'breath_var': breathVar,
+        'sonar_motion': sonarMotion,
         'lux': lux,
         'farts': farts,
         'snore': snore ? 1 : 0,
@@ -263,6 +302,9 @@ class MinuteSample {
         motion: (m['motion'] as num).toDouble(),
         noiseDb: (m['noise_db'] as num).toDouble(),
         noiseMax: (m['noise_max'] as num?)?.toDouble(),
+        breathRate: (m['breath_rate'] as num?)?.toDouble(),
+        breathVar: (m['breath_var'] as num?)?.toDouble(),
+        sonarMotion: (m['sonar_motion'] as num?)?.toDouble(),
         lux: (m['lux'] as num?)?.toDouble(),
         farts: (m['farts'] as int?) ?? 0,
         snore: (m['snore'] as int?) == 1,

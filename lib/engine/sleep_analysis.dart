@@ -39,6 +39,13 @@ class SleepAnalysis {
       for (final m in ms) {
         base.add(m.motion / scale + m.farts * 0.3);
       }
+    } else if (ms.any((m) => (m.sonarMotion ?? 0) > 0)) {
+      // Telefon na szafce, ale sonar widzi ruch ciała.
+      final sm = ms.map((m) => m.sonarMotion ?? 0).where((v) => v > 0).toList();
+      final med = max(_median(sm), 1e-9);
+      for (final m in ms) {
+        base.add((m.sonarMotion ?? med) / med + m.farts * 0.3);
+      }
     } else {
       // Brak ruchu (telefon nie leży na łóżku) — zastępczo z głośności otoczenia.
       final noise = ms.map((m) => max(m.noiseDb, -100.0)).toList();
@@ -95,6 +102,8 @@ class SleepAnalysis {
     const sd = [1.0, 0.6, 0.65, 0.6];
     const pSnore = [0.02, 0.06, 0.30, 0.38];
     const pSound = [0.30, 0.06, 0.05, 0.01];
+    // Sonar: nieregularny oddech (CV odstępów > 0,25) typowy dla REM i czuwania, rzadki w śnie głębokim.
+    const pIrregular = [0.50, 0.45, 0.15, 0.06];
 
     double gauss(double x, double m, double s) => -0.5 * pow((x - m) / s, 2) - log(s);
 
@@ -107,6 +116,8 @@ class SleepAnalysis {
         var e = gauss(x, mu[k], sd[k]);
         e += log(ms[i].snore ? pSnore[k] : 1 - pSnore[k]);
         e += log(ms[i].sounds > 0 ? pSound[k] : 1 - pSound[k]);
+        final bv = ms[i].breathVar;
+        if (bv != null) e += log(bv > 0.25 ? pIrregular[k] : 1 - pIrregular[k]);
         out[k] = e;
       }
       // Priory fizjologiczne

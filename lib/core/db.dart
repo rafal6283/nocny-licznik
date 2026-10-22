@@ -17,7 +17,7 @@ class Db {
     final dir = await getDatabasesPath();
     return openDatabase(
       p.join(dir, 'bakometr.db'),
-      version: 3,
+      version: 4,
       onUpgrade: (db, from, to) async {
         if (from < 2) {
           await db.execute('ALTER TABLE nights ADD COLUMN apnea_count INTEGER');
@@ -34,6 +34,22 @@ class Db {
           await db.execute('''UPDATE nights SET
               avg_noise = (SELECT AVG(noise_db) FROM minutes WHERE minutes.night_id = nights.id AND noise_db > -120),
               max_noise = (SELECT MAX(noise_db) FROM minutes WHERE minutes.night_id = nights.id)''');
+        }
+        if (from < 4) {
+          for (final c in [
+            'hypopnea_count INTEGER',
+            'cpap INTEGER',
+            'sonar INTEGER',
+            'breath_rate REAL',
+            'cpap_ahi REAL',
+            'cpap_leak REAL',
+            'cpap_usage_min INTEGER',
+          ]) {
+            await db.execute('ALTER TABLE nights ADD COLUMN $c');
+          }
+          for (final c in ['breath_rate REAL', 'breath_var REAL', 'sonar_motion REAL']) {
+            await db.execute('ALTER TABLE minutes ADD COLUMN $c');
+          }
         }
       },
       onCreate: (db, v) async {
@@ -66,6 +82,13 @@ class Db {
             mic_blocked_min INTEGER,
             avg_noise REAL,
             max_noise REAL,
+            hypopnea_count INTEGER,
+            cpap INTEGER,
+            sonar INTEGER,
+            breath_rate REAL,
+            cpap_ahi REAL,
+            cpap_leak REAL,
+            cpap_usage_min INTEGER,
             avg_lux REAL,
             max_lux REAL
           )''');
@@ -88,6 +111,9 @@ class Db {
             motion REAL,
             noise_db REAL,
             noise_max REAL,
+            breath_rate REAL,
+            breath_var REAL,
+            sonar_motion REAL,
             lux REAL,
             farts INTEGER,
             snore INTEGER,

@@ -94,6 +94,21 @@ class AudioSynth {
     return f.path;
   }
 
+  /// Ton sonaru 19 kHz @ 48 kHz, 1 s — całkowita liczba okresów, więc pętla jest bezszwowa.
+  static Future<String> sonarTone(double amplitude) async {
+    final dir = await _cacheDir();
+    final amp = (amplitude.clamp(0.05, 0.95) * 100).round();
+    final f = File(p.join(dir.path, 'sonar_19k_$amp.wav'));
+    if (f.existsSync()) return f.path;
+    const sr = 48000;
+    final pcm = Int16List(sr);
+    for (var i = 0; i < sr; i++) {
+      pcm[i] = (sin(2 * pi * 19000 * i / sr) * 32767 * amp / 100).round();
+    }
+    await f.writeAsBytes(wav(pcm, sr), flush: true);
+    return f.path;
+  }
+
   static Float64List _noise(String kind, int n, int sr) {
     final r = Random(42);
     final x = Float64List(n);

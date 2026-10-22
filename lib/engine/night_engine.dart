@@ -20,6 +20,7 @@ import '../core/models.dart';
 import '../core/settings.dart';
 import 'classifier.dart';
 import 'sleep_analysis.dart';
+import 'sonar.dart';
 
 enum NightState { idle, tracking, ringing, snoozed, finishing }
 
@@ -32,6 +33,7 @@ class NightPlan {
   final String lullaby;
   final int lullabyMin;
   final int delayMin;
+  final bool cpap;
   const NightPlan({
     this.alarmAt,
     this.smartWindowMin = 30,
@@ -40,6 +42,7 @@ class NightPlan {
     this.lullaby = 'none',
     this.lullabyMin = 20,
     this.delayMin = 0,
+    this.cpap = false,
   });
 }
 
@@ -79,6 +82,7 @@ class NightEngine extends ChangeNotifier {
     SoundType.talk: 40,
     SoundType.cough: 30,
     SoundType.apnea: 60,
+    SoundType.hypopnea: 40,
   };
   // Bezdech: cisza ≥10 s (definicja AASM: ustanie przepływu ≥10 s), maks. 2 min.
   static const _apneaMinSec = 10;
@@ -97,7 +101,13 @@ class NightEngine extends ChangeNotifier {
   int talks = 0;
   int coughs = 0;
   int apneas = 0;
+  int hypopneas = 0;
   bool micBlocked = false;
+  // Sonar
+  bool sonarActive = false;
+  SonarProcessor? sonar;
+  String? sonarNote;
+  bool get cpap => night?.cpap ?? false;
   double? lastLux;
   double levelDb = -90;
   double noiseFloorDb = -60;
@@ -157,6 +167,11 @@ class NightEngine extends ChangeNotifier {
   DateTime _lastShake = DateTime.fromMillisecondsSinceEpoch(0);
   void Function(int)? onShake;
 
+  // Sonar: wejście 48 kHz → decymacja do 16 kHz dla reszty analizy
+  Decimator3? _decim;
+  AudioPlayer? _tonePlayer;
+  double _minSonarMotion = 0;
+
   // Timery i odtwarzacze
   Timer? _minuteTimer;
   Timer? _luxTimer;
@@ -167,6 +182,17 @@ class NightEngine extends ChangeNotifier {
   AudioPlayer? _alarmPlayer;
 
   bool get isActive => state != NightState.idle;
+
+  /// Tekst powiadomienia w trakcie nocy.
+  String statusText() {
+    final parts = <String>[durHM(elapsed.inMinutes)];
+    if (_s.detectFarts) parts.add('💨 $farts');
+    final rate = sonar?.breathRate;
+    if (sonarGood && rate != null) parts.add('🫁 ${rate.round()}/min');
+    if (apneas + hypopneas > 0) parts.add('przerwy: ${apneas + hypopneas}');
+    if (cpap) parts.add('CPAP');
+    return parts.join(' · ');
+  }
 
   Duration get elapsed => night == null ? Duration.zero : DateTime.now().difference(night!.start);
 
@@ -193,6 +219,7 @@ class NightEngine extends ChangeNotifier {
       smartWindowMin: plan.smartWindowMin,
       tags: plan.tags,
       lightManual: plan.lightManual,
+      cpap: plan.cpap,
     );
     night!.id = await Db.instance.insertNight(night!);
     final docs = await getApplicationDocumentsDirectory();
@@ -216,8 +243,46 @@ class NightEngine extends ChangeNotifier {
     }
 
     // Mikrofon startujemy od razu (iOS wymaga rozpoczęcia nagrywania na pierwszym planie).
+    final wantSonar = Platform.isAndroid && _s.sonarEnabled;
+    Stream<Uint8List>? stream;
+    if (wantSonar) {
+      for (final src in [sonarSourceOf(_s.sonarSource), AndroidAudioSource.defaultSource]) {
+        try {
+          stream = await _rec!.startStream(RecordConfig(
+            encoder: AudioEncoder.pcm16bits,
+            sampleRate: SonarProcessor.fs,
+            numChannels: 1,
+            androidConfig: AndroidRecordConfig(audioSource: src),
+          ));
+          sonarActive = true;
+          break;
+        } catch (_) {
+          try {
+            await _rec!.stop();
+          } catch (_) {}
+        }
+      }
+      if (sonarActive) {
+        _decim = Decimator3();
+        sonar = SonarProcessor()
+          ..onSecond = _onSonarSecond
+          ..onEvent = _onSonarEvent;
+        night!.sonar = true;
+        try {
+          _tonePlayer ??= AudioPlayer();
+          await _tonePlayer!.setFilePath(await AudioSynth.sonarTone(_s.sonarVolume));
+          await _tonePlayer!.setLoopMode(LoopMode.one);
+          await _tonePlayer!.setVolume(1.0);
+          unawaited(_tonePlayer!.play());
+        } catch (e) {
+          sonarNote = 'Nie udało się włączyć tonu sonaru: $e';
+        }
+      } else {
+        sonarNote = 'Sonar niedostępny na tym telefonie — zwykły nasłuch.';
+      }
+    }
     try {
-      final stream = await _rec!.startStream(const RecordConfig(
+      stream ??= await _rec!.startStream(const RecordConfig(
         encoder: AudioEncoder.pcm16bits,
         sampleRate: _sr,
         numChannels: 1,
@@ -267,7 +332,13 @@ class NightEngine extends ChangeNotifier {
     talks = 0;
     coughs = 0;
     apneas = 0;
+    hypopneas = 0;
     micBlocked = false;
+    sonarActive = false;
+    sonar = null;
+    sonarNote = null;
+    _decim = null;
+    _minSonarMotion = 0;
     _lastLoudSample = 0;
     _gapMotion = 0;
     _breathSamples.clear();
@@ -324,15 +395,62 @@ class NightEngine extends ChangeNotifier {
       _hasCarry = true;
     }
     final bd = ByteData.sublistView(data);
-    for (var i = 0; i < n; i++) {
-      _ring[_total % _ringLen] = bd.getInt16(i * 2, Endian.little) / 32768.0;
-      _total++;
-      _sinceHop++;
-      if (_sinceHop >= _hop) {
-        _sinceHop = 0;
-        _onHop();
+    final dec = _decim;
+    if (dec != null) {
+      // 48 kHz: całość do sonaru, po filtrze co trzecia próbka do analizy dźwięków
+      final x = Float32List(n);
+      for (var i = 0; i < n; i++) {
+        x[i] = bd.getInt16(i * 2, Endian.little) / 32768.0;
+      }
+      sonar?.feed(x);
+      for (var i = 0; i < n; i++) {
+        final y = dec.push(x[i]);
+        if (y != null) _pushSample(y);
+      }
+    } else {
+      for (var i = 0; i < n; i++) {
+        _pushSample(bd.getInt16(i * 2, Endian.little) / 32768.0);
       }
     }
+  }
+
+  void _pushSample(double v) {
+    _ring[_total % _ringLen] = v;
+    _total++;
+    _sinceHop++;
+    if (_sinceHop >= _hop) {
+      _sinceHop = 0;
+      _onHop();
+    }
+  }
+
+  // =====================================================================
+  // SONAR
+  // =====================================================================
+  static AndroidAudioSource sonarSourceOf(String name) =>
+      AndroidAudioSource.values.firstWhere((e) => e.name == name, orElse: () => AndroidAudioSource.unprocessed);
+
+  bool get sonarGood => sonarActive && (sonar?.quality ?? -99) >= 6;
+
+  void _onSonarSecond(SonarSecond s) {
+    if (state == NightState.tracking) _minSonarMotion += s.motion;
+    if (s.moving) _gapMotion += 3; // ruch z sonaru też unieważnia „ciszę” detektora dźwiękowego
+  }
+
+  void _onSonarEvent(SonarEvent e) {
+    if (!analysisActive || state != NightState.tracking) return;
+    final type = e.apnea ? SoundType.apnea : SoundType.hypopnea;
+    if (e.apnea) {
+      apneas++;
+    } else {
+      hypopneas++;
+    }
+    _minApneas++;
+    final saved = _clipsSaved[type] ?? 0;
+    final withClip = _s.recordClips && saved < (_clipLimits[type] ?? 40);
+    final back = min(_ringLen - _sr, (e.seconds + 4) * _sr);
+    _pending.add(_Pending(type, max(0, _total - back), _total, e.depth, e.start, withClip, _sr * 40));
+    notifyListeners();
   }
 
   void _onHop() {
@@ -376,13 +494,14 @@ class NightEngine extends ChangeNotifier {
       _zeroHops = 0;
       if (micBlocked) {
         micBlocked = false;
-        BakometrNative.updateTracking('💨 ${fartsLabel(farts)} · ${durHM(elapsed.inMinutes)}');
+        BakometrNative.updateTracking(statusText());
         notifyListeners();
       }
     }
 
     final muted = _muteUntil != null && now.isBefore(_muteUntil!);
-    _trackApnea(db, muted || digitalZero);
+    // Dźwiękowy detektor przerw: wyłączony przy CPAP (szum aparatu, brak chrapania) i gdy działa sonar.
+    _trackApnea(db, muted || digitalZero || cpap || sonarGood);
     final loudEnough = db > noiseFloorDb + 5 || _recentSnore(now);
     if (analysisActive && !muted && state == NightState.tracking && loudEnough && _clf != null &&
         _total >= SoundClassifier.windowLen && !_classifying) {
@@ -407,7 +526,12 @@ class NightEngine extends ChangeNotifier {
       final s = _clf!.classify(w);
       lastHeard = '${s.top} ${(s.topScore * 100).round()}%';
 
-      if (s.fart >= _thr(_s.fartSensitivity, 0.08, 0.5)) _hit(SoundType.fart, s.fart, now, gapMs: 2500);
+      if (_s.detectFarts) {
+        // CPAP: nieszczelność maski daje krótkie „pyknięcia” — wymagamy pewniejszego i głośniejszego dźwięku.
+        final thr = _thr(_s.fartSensitivity, 0.08, 0.5) + (cpap ? 0.15 : 0);
+        final loudOk = !cpap || levelDb > noiseFloorDb + 8;
+        if (s.fart >= thr && loudOk) _hit(SoundType.fart, s.fart, now, gapMs: 2500);
+      }
       if (s.snore >= _thr(_s.snoreSensitivity, 0.15, 0.6)) _hit(SoundType.snore, s.snore, now, gapMs: 60000);
       if (_s.detectTalk && s.speech >= 0.6) _hit(SoundType.talk, s.speech, now, gapMs: 10000);
       if (_s.detectCough && s.cough >= 0.45) _hit(SoundType.cough, s.cough, now, gapMs: 3000);
@@ -459,6 +583,7 @@ class NightEngine extends ChangeNotifier {
         _minSounds++;
       case SoundType.snore:
       case SoundType.apnea:
+      case SoundType.hypopnea:
         break;
     }
     final saved = _clipsSaved[t] ?? 0;
@@ -467,7 +592,7 @@ class NightEngine extends ChangeNotifier {
     final startSample = max(0, _total - SoundClassifier.windowLen - _preRoll);
     _pending.add(_Pending(t, startSample, _total, conf, now, withClip, _maxClip));
     if (t == SoundType.fart) {
-      BakometrNative.updateTracking('💨 ${fartsLabel(farts)} · ${durHM(elapsed.inMinutes)}');
+      BakometrNative.updateTracking(statusText());
     }
   }
 
@@ -622,13 +747,18 @@ class NightEngine extends ChangeNotifier {
       snore: _minSnore,
       apneas: _minApneas,
       sounds: _minSounds,
+      breathRate: sonarGood ? sonar!.minuteRate() : null,
+      breathVar: sonarGood ? sonar!.breathVar : null,
+      sonarMotion: sonarActive ? _minSonarMotion : null,
     );
+    sonar?.clearMinute();
+    _minSonarMotion = 0;
     _luxFresh = false;
     _resetMinute();
     minutes.add(m);
     await Db.instance.insertMinute(n!.id!, m);
     if (minutes.length % 5 == 0) {
-      BakometrNative.updateTracking('💨 ${fartsLabel(farts)} · ${durHM(elapsed.inMinutes)}');
+      BakometrNative.updateTracking(statusText());
     }
     notifyListeners();
   }
@@ -666,7 +796,7 @@ class NightEngine extends ChangeNotifier {
     analysisActive = false;
     await _stopLullaby();
     notifyListeners();
-    await BakometrNative.showAlarm(title: 'Pobudka! ☀️', body: 'Noc: ${fartsLabel(farts)} 💨');
+    await BakometrNative.showAlarm(title: 'Pobudka! ☀️', body: statusText());
     await BakometrNative.cancelNotification(900);
 
     try {
@@ -724,6 +854,9 @@ class NightEngine extends ChangeNotifier {
     await _audioSub?.cancel();
     _audioSub = null;
     try {
+      await _tonePlayer?.stop();
+    } catch (_) {}
+    try {
       await _rec?.stop();
       await _rec?.dispose();
     } catch (_) {}
@@ -770,7 +903,10 @@ class NightEngine extends ChangeNotifier {
     n.talkCount = evs.where((e) => e.type == SoundType.talk && e.counts).length;
     n.coughCount = evs.where((e) => e.type == SoundType.cough && e.counts).length;
     n.apneaCount = evs.where((e) => e.type == SoundType.apnea && e.counts).length;
-    n.apneaIndex = sum.sleepMin >= 60 ? n.apneaCount / (sum.sleepMin / 60.0) : 0;
+    n.hypopneaCount = evs.where((e) => e.type == SoundType.hypopnea && e.counts).length;
+    n.apneaIndex = sum.sleepMin >= 60 ? (n.apneaCount + n.hypopneaCount) / (sum.sleepMin / 60.0) : 0;
+    final rates = ms.map((m) => m.breathRate).whereType<double>().toList();
+    n.breathRate = rates.isEmpty ? null : rates.reduce((a, b) => a + b) / rates.length;
     n.snoreMin = ms.where((m) => m.snore).length;
     final noise = ms.where((m) => m.noiseDb > -120).toList();
     if (noise.isNotEmpty) {

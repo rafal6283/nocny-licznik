@@ -102,18 +102,24 @@ class _TrackingScreenState extends State<TrackingScreen> {
           Text('w łóżku ${durHM(e.elapsed.inMinutes)}',
               textAlign: TextAlign.center, style: const TextStyle(color: C.muted)),
           const SizedBox(height: 36),
-          Text('${e.farts}',
-              textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 72, fontWeight: FontWeight.w700, color: C.gas, height: 1)),
-          Text('💨 ${plural(e.farts, 'bąk', 'bąki', 'bąków')} tej nocy',
-              textAlign: TextAlign.center, style: const TextStyle(color: C.gas)),
+          ..._bigCounter(),
           const SizedBox(height: 24),
           Wrap(alignment: WrapAlignment.center, runSpacing: 8, children: [
             _pill(snoringNow ? '😴 chrapanie' : '😴 cisza', snoringNow ? C.light : C.muted),
             const SizedBox(width: 8),
             _pill('💬 ${e.talks}', C.rem),
             const SizedBox(width: 8),
-            _pill('🫁 ${e.apneas}', C.danger),
+            _pill('🫁 ${e.apneas + e.hypopneas}', C.danger),
+            if (e.sonarActive) ...[
+              const SizedBox(width: 8),
+              _pill(
+                  '📡 ${e.sonarGood ? (e.sonar?.breathRate != null ? '${e.sonar!.breathRate!.round()}/min' : 'odczyt…') : 'słaby sygnał'}',
+                  e.sonarGood ? C.light : C.muted),
+            ],
+            if (e.cpap) ...[
+              const SizedBox(width: 8),
+              _pill('😷 CPAP', C.muted),
+            ],
             const SizedBox(width: 8),
             _pill('☀️ ${luxLabel(e.lastLux)}', C.moon),
             const SizedBox(width: 8),
@@ -138,6 +144,11 @@ class _TrackingScreenState extends State<TrackingScreen> {
                   textAlign: TextAlign.center, style: const TextStyle(fontSize: 12, color: C.muted)),
           ],
           const Spacer(),
+          if (e.sonarNote != null)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Text(e.sonarNote!, textAlign: TextAlign.center, style: const TextStyle(color: C.muted)),
+            ),
           if (e.micBlocked)
             Padding(
               padding: const EdgeInsets.only(bottom: 8),
@@ -202,7 +213,7 @@ class _TrackingScreenState extends State<TrackingScreen> {
               child: Container(
                 color: Colors.black.withValues(alpha: 0.93),
                 alignment: Alignment.center,
-                child: Text('${hhmm(now)}\n💨 ${e.farts}',
+                child: Text(Settings.instance.detectFarts ? '${hhmm(now)}\n💨 ${e.farts}' : hhmm(now),
                     textAlign: TextAlign.center,
                     style: TextStyle(fontSize: 28, color: C.muted.withValues(alpha: 0.35))),
               ),
@@ -210,6 +221,34 @@ class _TrackingScreenState extends State<TrackingScreen> {
           ),
       ]),
     );
+  }
+
+  List<Widget> _bigCounter() {
+    if (Settings.instance.detectFarts) {
+      return [
+        Text('${e.farts}',
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 72, fontWeight: FontWeight.w700, color: C.gas, height: 1)),
+        Text('💨 ${plural(e.farts, 'bąk', 'bąki', 'bąków')} tej nocy',
+            textAlign: TextAlign.center, style: const TextStyle(color: C.gas)),
+      ];
+    }
+    final rate = e.sonar?.breathRate;
+    if (e.sonarGood && rate != null) {
+      return [
+        Text(rate.toStringAsFixed(0),
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 72, fontWeight: FontWeight.w700, color: C.light, height: 1)),
+        const Text('🫁 oddechów na minutę', textAlign: TextAlign.center, style: TextStyle(color: C.light)),
+      ];
+    }
+    final snoreMin = e.minutes.where((m) => m.snore).length;
+    return [
+      Text(durHM(snoreMin),
+          textAlign: TextAlign.center,
+          style: const TextStyle(fontSize: 56, fontWeight: FontWeight.w700, color: C.light, height: 1)),
+      const Text('😴 chrapania tej nocy', textAlign: TextAlign.center, style: TextStyle(color: C.light)),
+    ];
   }
 
   Widget _pill(String t, Color c) => Container(

@@ -57,7 +57,7 @@ class _AlarmScreenState extends State<AlarmScreen> {
             const SizedBox(height: 8),
             Text(e.ringReason, textAlign: TextAlign.center, style: const TextStyle(color: C.muted)),
             const SizedBox(height: 28),
-            Text('Tej nocy: 💨 ${fartsLabel(e.farts)}',
+            Text(s.detectFarts ? 'Tej nocy: 💨 ${fartsLabel(e.farts)}' : 'W łóżku ${durHM(e.elapsed.inMinutes)}',
                 textAlign: TextAlign.center, style: const TextStyle(fontSize: 22, color: C.gas)),
             const Spacer(),
             SizedBox(

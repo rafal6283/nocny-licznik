@@ -89,7 +89,13 @@ class _StatsScreenState extends State<StatsScreen> {
       ]);
     }
 
-    final metrics = buildMetrics(regularityScores(chrono));
+    final showFarts = Settings.instance.detectFarts || chrono.any((n) => n.fartCount > 0);
+    final metrics = buildMetrics(
+      regularityScores(chrono),
+      farts: showFarts,
+      cpap: chrono.any((n) => n.cpapAhi != null),
+      breath: chrono.any((n) => n.breathRate != null),
+    );
     final nights = _rangeNights();
 
     return ListView(
@@ -102,7 +108,7 @@ class _StatsScreenState extends State<StatsScreen> {
           _metricCard(m),
           const SizedBox(height: 12),
         ],
-        ..._extras(nights),
+        ..._extras(nights, showFarts),
       ],
     );
   }
@@ -171,7 +177,7 @@ class _StatsScreenState extends State<StatsScreen> {
       );
 
   /// Sekcje własne Nocnego Licznika (pod statystykami w stylu Sleep Cycle).
-  List<Widget> _extras(List<Night> nights) {
+  List<Widget> _extras(List<Night> nights, bool showFarts) {
     if (nights.isEmpty) return [];
     final ids = nights.map((n) => n.id).toSet();
     final totalFarts = nights.fold<int>(0, (a, n) => a + n.fartCount);
@@ -217,21 +223,25 @@ class _StatsScreenState extends State<StatsScreen> {
             _delta('${avg(ns.map((n) => n.score)).round()}%', C.text),
             const SizedBox(width: 6),
             _delta(durHM(avg(ns.map((n) => n.durationMin))), C.light),
-            const SizedBox(width: 6),
-            _delta('💨 ${avg(ns.map((n) => n.fartCount)).toStringAsFixed(1)}', C.gas),
+            if (showFarts) ...[
+              const SizedBox(width: 6),
+              _delta('💨 ${avg(ns.map((n) => n.fartCount)).toStringAsFixed(1)}', C.gas),
+            ],
           ]),
         );
 
     return [
       Padding(
         padding: const EdgeInsets.fromLTRB(4, 12, 4, 10),
-        child: Text('Więcej o wiatrach i nawykach',
+        child: Text(showFarts ? 'Więcej o wiatrach i nawykach' : 'Więcej o nawykach',
             style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
       ),
       TileGrid(columns: 3, children: [
-        StatTile(label: 'Średnio / noc', value: '💨 ${avg(nights.map((n) => n.fartCount)).toStringAsFixed(1)}', color: C.gas),
-        StatTile(label: 'Razem', value: '$totalFarts', sub: '${nights.length} nocy', color: C.gas),
-        StatTile(label: 'Rekord', value: '${record.fartCount}', sub: dayLabel(nightDay(record)), color: C.moon),
+        if (showFarts) ...[
+          StatTile(label: 'Średnio / noc', value: '💨 ${avg(nights.map((n) => n.fartCount)).toStringAsFixed(1)}', color: C.gas),
+          StatTile(label: 'Razem', value: '$totalFarts', sub: '${nights.length} nocy', color: C.gas),
+          StatTile(label: 'Rekord', value: '${record.fartCount}', sub: dayLabel(nightDay(record)), color: C.moon),
+        ],
         StatTile(
           label: debt >= 0 ? 'Dług snu (14 dni)' : 'Nadwyżka snu',
           value: durHM(debt.abs()),
@@ -251,6 +261,7 @@ class _StatsScreenState extends State<StatsScreen> {
           color: const Color(0xFF3DDC97),
         ),
       ]),
+      if (showFarts) ...[
       const SizedBox(height: 12),
       Section(
         title: 'O której najczęściej? 💨',
@@ -264,11 +275,12 @@ class _StatsScreenState extends State<StatsScreen> {
           showAverage: false,
         ),
       ),
+      ],
       const SizedBox(height: 12),
       Section(
         title: 'Co wpływa na wynik? (tagi)',
         child: impacts.isEmpty
-            ? const Text('Dodawaj tagi przed snem (#fasola, #piwo…), a tu zobaczysz, co daje najwięcej wiatrów.',
+            ? const Text('Dodawaj tagi przed snem (#kawa, #piwo, #trening…), a tu zobaczysz, jak wpływają na sen.',
                 style: TextStyle(color: C.muted))
             : Column(children: [
                 for (final t in impacts)
@@ -278,14 +290,20 @@ class _StatsScreenState extends State<StatsScreen> {
                       Expanded(
                         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                           Text('#${t.tag}', style: const TextStyle(fontWeight: FontWeight.w700)),
-                          Text('${t.nights} ${plural(t.nights, 'noc', 'noce', 'nocy')} · '
-                              '${t.fartsWith.toStringAsFixed(1)} vs ${t.fartsWithout.toStringAsFixed(1)} bąków',
+                          Text(
+                              showFarts
+                                  ? '${t.nights} ${plural(t.nights, 'noc', 'noce', 'nocy')} · '
+                                      '${t.fartsWith.toStringAsFixed(1)} vs ${t.fartsWithout.toStringAsFixed(1)} bąków'
+                                  : '${t.nights} ${plural(t.nights, 'noc', 'noce', 'nocy')} · '
+                                      'ocena ${t.scoreWith.round()}% vs ${t.scoreWithout.round()}%',
                               style: const TextStyle(fontSize: 12, color: C.muted)),
                         ]),
                       ),
-                      _delta('${t.fartDeltaPct >= 0 ? '+' : ''}${t.fartDeltaPct.round()}% 💨',
-                          t.fartDeltaPct > 10 ? C.danger : (t.fartDeltaPct < -10 ? C.gas : C.muted)),
-                      const SizedBox(width: 6),
+                      if (showFarts) ...[
+                        _delta('${t.fartDeltaPct >= 0 ? '+' : ''}${t.fartDeltaPct.round()}% 💨',
+                            t.fartDeltaPct > 10 ? C.danger : (t.fartDeltaPct < -10 ? C.gas : C.muted)),
+                        const SizedBox(width: 6),
+                      ],
                       _delta('${t.scoreDelta >= 0 ? '+' : ''}${t.scoreDelta.round()} pkt',
                           t.scoreDelta < -3 ? C.danger : (t.scoreDelta > 3 ? C.gas : C.muted)),
                     ]),

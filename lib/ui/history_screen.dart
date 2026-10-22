@@ -4,6 +4,7 @@ import '../core/bus.dart';
 import '../core/db.dart';
 import '../core/fmt.dart';
 import '../core/models.dart';
+import '../core/settings.dart';
 import 'theme.dart';
 
 class HistoryScreen extends StatefulWidget {
@@ -94,9 +95,13 @@ class _HistoryScreenState extends State<HistoryScreen> {
                   ]),
                 ),
                 Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-                  Text('💨 ${n.fartCount}',
-                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: C.gas)),
-                  if (isRecord) const Text('🏆 rekord', style: TextStyle(fontSize: 11, color: C.moon)),
+                  if (Settings.instance.detectFarts || n.fartCount > 0) ...[
+                    Text('💨 ${n.fartCount}',
+                        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: C.gas)),
+                    if (isRecord) const Text('🏆 rekord', style: TextStyle(fontSize: 11, color: C.moon)),
+                  ] else
+                    Text(durHM(n.durationMin), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                  if (n.cpap) const Text('😷 CPAP', style: TextStyle(fontSize: 11, color: C.muted)),
                   if (n.snoreMin > 0) Text('😴 ${durHM(n.snoreMin)}', style: const TextStyle(fontSize: 11, color: C.muted)),
                   if (n.apneaIndex >= 5)
                     Text('🫁 ${n.apneaIndex.toStringAsFixed(1)}/h', style: const TextStyle(fontSize: 11, color: C.danger)),

@@ -31,6 +31,7 @@ class C {
         SoundType.talk => rem,
         SoundType.cough => wake,
         SoundType.apnea => danger,
+        SoundType.hypopnea => wake,
       };
 }
 

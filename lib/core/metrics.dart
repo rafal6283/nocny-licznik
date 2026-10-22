@@ -93,9 +93,9 @@ Map<int, double> regularityScores(List<Night> chrono) {
   return out;
 }
 
-List<Metric> buildMetrics(Map<int, double> regularity) {
+List<Metric> buildMetrics(Map<int, double> regularity, {bool farts = true, bool cpap = false, bool breath = false}) {
   final s = Settings.instance;
-  return [
+  final all = [
     Metric(
       id: 'quality',
       title: 'Jakość snu',
@@ -227,13 +227,40 @@ List<Metric> buildMetrics(Map<int, double> regularity) {
       title: 'Przerwy w oddechu',
       color: const Color(0xFFFF7A85),
       kind: ChartKind.bar,
-      value: (n) => n.apneaCount.toDouble(),
+      value: (n) => (n.apneaCount + n.hypopneaCount).toDouble(),
       fmt: (v) => v == v.roundToDouble() ? '${v.round()}' : v.toStringAsFixed(1),
       higherIsBetter: false,
-      about: 'Liczba przerw w oddychaniu ≥10 s zakończonych westchnieniem lub chrapnięciem. Wskaźnik na godzinę snu '
+      about: 'Liczba przerw w oddychaniu ≥10 s (z sonarem także spłyceń o ≥50%). Wskaźnik na godzinę snu '
           'poniżej 5 uznaje się za normę. To orientacyjny sygnał, nie diagnoza.',
     ),
+    Metric(
+      id: 'breath_rate',
+      title: 'Częstość oddechu',
+      color: const Color(0xFF6FA8FF),
+      kind: ChartKind.line,
+      value: (n) => n.breathRate,
+      fmt: (v) => '${v.toStringAsFixed(1)}/min',
+      zeroBased: false,
+      about: 'Średnia liczba oddechów na minutę w czasie snu, mierzona sonarem. U dorosłych we śnie zwykle 12–20.',
+    ),
+    Metric(
+      id: 'cpap_ahi',
+      title: 'AHI z aparatu CPAP',
+      color: const Color(0xFFFF9E7A),
+      kind: ChartKind.bar,
+      value: (n) => n.cpapAhi,
+      fmt: (v) => v.toStringAsFixed(1),
+      higherIsBetter: false,
+      about: 'Wskaźnik bezdechów i spłyceń na godzinę zarejestrowany przez aparat CPAP (wpisany ręcznie albo '
+          'zaimportowany z OSCAR). Cel terapii to zwykle AHI < 5.',
+    ),
   ];
+  return all.where((m) {
+    if (m.id == 'farts') return farts;
+    if (m.id == 'cpap_ahi') return cpap;
+    if (m.id == 'breath_rate') return breath;
+    return true;
+  }).toList();
 }
 
 /// Kolory dostępne bez importu warstwy UI.

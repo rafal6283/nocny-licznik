@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:bakometr_native/bakometr_native.dart';
 import 'package:flutter/material.dart';
 
@@ -96,6 +98,7 @@ class _HomeScreenState extends State<HomeScreen> {
       lullaby: s.lullaby,
       lullabyMin: s.lullabyMin,
       delayMin: s.delayStartMin,
+      cpap: s.cpapDefault,
     );
     final ok = await NightEngine.instance.start(plan);
     if (!mounted) return;
@@ -213,6 +216,28 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
         const SizedBox(height: 12),
 
+        // --- CPAP i sonar ---
+        Card(
+          child: Column(children: [
+            SwitchListTile(
+              secondary: const Text('😷', style: TextStyle(fontSize: 22)),
+              title: const Text('Śpię z aparatem CPAP'),
+              subtitle: const Text('Ignoruje szum aparatu i nieszczelność maski; dane z aparatu dodasz rano'),
+              value: s.cpapDefault,
+              onChanged: (v) => s.cpapDefault = v,
+            ),
+            if (Platform.isAndroid)
+              SwitchListTile(
+                secondary: const Text('📡', style: TextStyle(fontSize: 22)),
+                title: const Text('Sonar oddechu'),
+                subtitle: const Text('Niesłyszalny ton mierzy oddech bez dotyku — przetestuj w Ustawieniach'),
+                value: s.sonarEnabled,
+                onChanged: (v) => s.sonarEnabled = v,
+              ),
+          ]),
+        ),
+        const SizedBox(height: 12),
+
         // --- Kołysanka ---
         Section(
           title: 'Kołysanka',
@@ -290,9 +315,19 @@ class _HomeScreenState extends State<HomeScreen> {
                     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                       Text('Ostatnia noc · ${dayLabel(last.start)}', style: const TextStyle(color: C.muted, fontSize: 12)),
                       const SizedBox(height: 4),
-                      Text('💨 ${fartsLabel(last.fartCount)}',
-                          style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: C.gas)),
-                      Text('${durHM(last.durationMin)} snu · chrapanie ${durHM(last.snoreMin)}',
+                      if (s.detectFarts || last.fartCount > 0)
+                        Text('💨 ${fartsLabel(last.fartCount)}',
+                            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: C.gas))
+                      else
+                        Text('${durHM(last.durationMin)} snu',
+                            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: C.text)),
+                      Text(
+                          [
+                            if (s.detectFarts || last.fartCount > 0) '${durHM(last.durationMin)} snu',
+                            'chrapanie ${durHM(last.snoreMin)}',
+                            if (last.apneaIndex >= 5) '🫁 ${last.apneaIndex.toStringAsFixed(1)}/h',
+                            if (last.breathRate != null) 'oddech ${last.breathRate!.round()}/min',
+                          ].join(' · '),
                           style: const TextStyle(color: C.text)),
                     ]),
                   ),

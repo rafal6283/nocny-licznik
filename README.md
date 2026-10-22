@@ -1,14 +1,16 @@
 # 🌙 Nocny Licznik
 
-Nocny monitor snu na Android i iOS w stylu Sleep Cycle / Sleep as Android — z głównym naciskiem na **liczenie puszczanych wiatrów**.
+Nocny monitor snu na Android i iOS w stylu Sleep Cycle / Sleep as Android — z opcjonalnym **liczeniem puszczanych wiatrów**, sonarem oddechu i trybem CPAP.
 
 ## Co potrafi
 
-- **Liczenie wiatrów** — rozpoznawanie dźwięków modelem [YAMNet](https://github.com/tensorflow/models/tree/master/research/audioset/yamnet) (Google, AudioSet, klasa „Fart”) działającym offline na telefonie
+- **Liczenie wiatrów (opcja, domyślnie wyłączona)** — rozpoznawanie dźwięków modelem [YAMNet](https://github.com/tensorflow/models/tree/master/research/audioset/yamnet) (Google, AudioSet, klasa „Fart”) działającym offline na telefonie
 - **Chrapanie, mówienie przez sen, kaszel** — z krótkimi nagraniami do odsłuchu i weryfikacji rano (✓ / ✗)
 - **Fazy snu i ocena nocy** — ukryty model Markowa (dekodowanie Viterbiego) łączący aktygrafię z ruchu telefonu na materacu, chrapanie, dźwięki i fizjologię cykli snu (estymacja, nie badanie medyczne)
 - **Przerwy w oddechu (bezdech)** — wzorzec „oddech/chrapanie → cisza ≥10 s → westchnienie/chrapnięcie”, wskaźnik przerw na godzinę snu z progami 5/15/30 jak dla AHI, nagrania do odsłuchu. Orientacyjnie, nie diagnoza
 - **Wykres snu w stylu Sleep Cycle** — płynna fala głębokości snu, pasy zdarzeń, kursor
+- **Sonar oddechu (Android)** — niesłyszalny ton 19 kHz z głośnika, echo od klatki piersiowej demodulowane I/Q: częstość oddechu, ruch ciała, przerwy (spadek ≥70%) i spłycenia (≥50%) oddechu ≥10 s, także bez chrapania i przy szumie CPAP; ekran testowy z oddechem na żywo
+- **Tryb CPAP** — tłumienie fałszywych wykryć od nieszczelności maski, dane z aparatu (AHI, nieszczelność, czas użycia) wpisywane ręcznie lub importowane z CSV programu OSCAR, statystyka AHI z aparatu
 - **Ostrzeżenie o zajętym mikrofonie** — gdy inna aplikacja przejmie mikrofon
 - **Światło w sypialni** — Android: czujnik światła przez całą noc; iPhone: pomiar przednią kamerą przy starcie i przy otwarciu aplikacji + ręczny wybór
 - **Inteligentny budzik** — okno 15/30/45 min, dzwoni w lekkiej fazie snu; narastająca głośność, drzemka, wibracje

@@ -1,13 +1,19 @@
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:bakometr_native/bakometr_native.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
 
+import '../core/cpap_import.dart';
 import '../core/db.dart';
 import '../core/exchange_export.dart';
 import '../core/fmt.dart';
 import '../core/health_sync.dart';
 import '../core/reminders.dart';
 import '../core/settings.dart';
+import 'sonar_test_screen.dart';
 import 'theme.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -51,6 +57,33 @@ class _SettingsScreenState extends State<SettingsScreen> {
           },
         ),
       );
+
+  Future<void> _importCpap() async {
+    try {
+      final r = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: const ['csv', 'txt'],
+        withData: true,
+      );
+      if (r == null || r.files.isEmpty) return;
+      final f = r.files.first;
+      final bytes = f.bytes ?? (f.path != null ? await File(f.path!).readAsBytes() : null);
+      if (bytes == null) throw 'nie można odczytać pliku';
+      final days = CpapImport.parse(utf8.decode(bytes, allowMalformed: true));
+      if (days.isEmpty) {
+        _snack('Nie rozpoznano kolumn „Date” i „AHI” w pliku.');
+        return;
+      }
+      final n = await CpapImport.apply(days);
+      _snack('Wczytano ${days.length} dni z aparatu · dopasowano do $n ${plural(n, 'nocy', 'nocy', 'nocy')}.');
+    } catch (e) {
+      _snack('Import nie powiódł się: $e');
+    }
+  }
+
+  void _snack(String t) {
+    if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t)));
+  }
 
   Future<void> _pickBedtime() async {
     final t = await showTimePicker(
@@ -158,15 +191,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _head('Wykrywanie'),
         Card(
           child: Column(children: [
-            ListTile(
-              title: const Text('Czułość na wiatry 💨'),
-              subtitle: Slider(
-                value: s.fartSensitivity,
-                divisions: 10,
-                label: '${(s.fartSensitivity * 100).round()}%',
-                onChanged: (v) => s.fartSensitivity = v,
-              ),
+            SwitchListTile(
+              title: const Text('Liczenie wiatrów 💨'),
+              subtitle: const Text('Rozpoznawanie i licznik puszczanych wiatrów (domyślnie wyłączone)'),
+              value: s.detectFarts,
+              onChanged: (v) => s.detectFarts = v,
             ),
+            if (s.detectFarts)
+              ListTile(
+                title: const Text('Czułość na wiatry'),
+                subtitle: Slider(
+                  value: s.fartSensitivity,
+                  divisions: 10,
+                  label: '${(s.fartSensitivity * 100).round()}%',
+                  onChanged: (v) => s.fartSensitivity = v,
+                ),
+              ),
             ListTile(
               title: const Text('Czułość na chrapanie 😴'),
               subtitle: Slider(
@@ -240,6 +280,49 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ]),
         ),
 
+        if (Platform.isAndroid) ...[
+          _head('Sonar'),
+          Card(
+            child: Column(children: [
+              SwitchListTile(
+                title: const Text('Sonar oddechu 📡'),
+                subtitle: const Text(
+                    'Głośnik nadaje niesłyszalny ton 19 kHz, mikrofon odbiera echo od klatki piersiowej: częstość '
+                    'oddechu, ruch oraz przerwy i spłycenia oddechu bez dotyku. Telefon może leżeć na szafce, '
+                    'najlepiej na ładowarce.'),
+                value: s.sonarEnabled,
+                onChanged: (v) => s.sonarEnabled = v,
+              ),
+              ListTile(
+                leading: const Icon(Icons.sensors),
+                title: const Text('Test sonaru'),
+                subtitle: const Text('Sprawdź, czy Twój telefon go obsługuje, i zobacz oddech na żywo'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SonarTestScreen())),
+              ),
+            ]),
+          ),
+        ],
+
+        _head('CPAP'),
+        Card(
+          child: Column(children: [
+            SwitchListTile(
+              title: const Text('Śpię z aparatem CPAP'),
+              subtitle: const Text('Domyślnie dla kolejnych nocy (zmienisz też na ekranie Noc)'),
+              value: s.cpapDefault,
+              onChanged: (v) => s.cpapDefault = v,
+            ),
+            ListTile(
+              leading: const Icon(Icons.upload_file),
+              title: const Text('Importuj dane z aparatu (CSV)'),
+              subtitle: const Text('Eksport „Summary” z programu OSCAR (karta SD z ResMed, Philips i in.) — '
+                  'AHI, nieszczelność i czas użycia trafią do odpowiednich nocy'),
+              onTap: _importCpap,
+            ),
+          ]),
+        ),
+
         _head('Tagi'),
         Card(
           child: ListTile(
@@ -301,7 +384,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ]),
         ),
         const SizedBox(height: 16),
-        const Center(child: Text('Nocny Licznik 2.1', style: TextStyle(color: C.muted, fontSize: 12))),
+        const Center(child: Text('Nocny Licznik 2.2', style: TextStyle(color: C.muted, fontSize: 12))),
       ],
     );
   }

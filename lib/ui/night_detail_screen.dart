@@ -26,7 +26,7 @@ class _NightDetailScreenState extends State<NightDetailScreen> {
   Night? n;
   List<MinuteSample> ms = [];
   List<SoundEvent> evs = [];
-  SoundType? filter = SoundType.fart;
+  SoundType? filter = Settings.instance.detectFarts ? SoundType.fart : SoundType.snore;
   bool stepView = false;
   final player = AudioPlayer();
   int? playingId;
@@ -175,6 +175,94 @@ class _NightDetailScreenState extends State<NightDetailScreen> {
     );
   }
 
+  Widget _cpapCard(Night night) {
+    String f(double? v, String unit, [int dec = 1]) => v == null ? '—' : '${v.toStringAsFixed(dec)}$unit';
+    final ahi = night.cpapAhi;
+    return Section(
+      title: 'Aparat CPAP 😷',
+      trailing: TextButton(onPressed: () => _editCpap(night), child: Text(ahi == null ? 'Dodaj dane' : 'Edytuj')),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        TileGrid(columns: 3, children: [
+          StatTile(
+            label: 'AHI z aparatu',
+            value: f(ahi, ''),
+            sub: ahi != null ? apneaCategory(ahi) : null,
+            color: ahi == null ? C.muted : (ahi < 5 ? C.gas : (ahi < 15 ? C.moon : C.danger)),
+          ),
+          StatTile(label: 'Nieszczelność', value: f(night.cpapLeak, ' l/min')),
+          StatTile(
+              label: 'Użycie', value: night.cpapUsageMin == null ? '—' : durHM(night.cpapUsageMin!)),
+        ]),
+        const SizedBox(height: 8),
+        const Text(
+          'AHI odczytasz z wyświetlacza aparatu, aplikacji producenta (np. myAir, DreamMapper) albo zaimportujesz '
+          'z pliku CSV programu OSCAR (Ustawienia → CPAP). Przy dobrze dobranym ciśnieniu AHI zwykle jest < 5.',
+          style: TextStyle(fontSize: 11, color: C.muted),
+        ),
+      ]),
+    );
+  }
+
+  Future<void> _editCpap(Night night) async {
+    final ahi = TextEditingController(text: night.cpapAhi?.toString() ?? '');
+    final leak = TextEditingController(text: night.cpapLeak?.toString() ?? '');
+    final use = TextEditingController(
+        text: night.cpapUsageMin == null ? '' : (night.cpapUsageMin! / 60).toStringAsFixed(1));
+    double? num(String s) => double.tryParse(s.replaceAll(',', '.').trim());
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: const Text('Dane z aparatu CPAP'),
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          TextField(
+              controller: ahi,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              decoration: const InputDecoration(labelText: 'AHI (zdarzenia/h)')),
+          TextField(
+              controller: leak,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              decoration: const InputDecoration(labelText: 'Nieszczelność (l/min) — opcjonalnie')),
+          TextField(
+              controller: use,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              decoration: const InputDecoration(labelText: 'Czas użycia (godziny) — opcjonalnie')),
+        ]),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Anuluj')),
+          FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('Zapisz')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    night.cpap = true;
+    night.cpapAhi = num(ahi.text);
+    night.cpapLeak = num(leak.text);
+    final h = num(use.text);
+    night.cpapUsageMin = h == null ? null : (h * 60).round();
+    await _save();
+  }
+
+  Widget _breathRateCard() {
+    final pts = ms.where((m) => m.breathRate != null).toList();
+    if (pts.length < 3) return const SizedBox();
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: Section(
+        title: 'Częstość oddechu (sonar)',
+        trailing: Text(
+            'śr. ${(pts.map((m) => m.breathRate!).reduce((a, b) => a + b) / pts.length).toStringAsFixed(1)}/min',
+            style: const TextStyle(color: C.muted, fontSize: 12)),
+        child: LineSeriesChart(
+          values: [for (final m in pts) m.breathRate],
+          labels: [for (final m in pts) hhmm(m.ts)],
+          color: C.light,
+          zeroBased: false,
+          fmt: (v) => v.toStringAsFixed(0),
+        ),
+      ),
+    );
+  }
+
   Widget _breathingCard(Night night) {
     final idx = night.apneaIndex;
     final color = idx < 5 ? C.gas : (idx < 15 ? C.moon : C.danger);
@@ -188,15 +276,23 @@ class _NightDetailScreenState extends State<NightDetailScreen> {
           const SizedBox(width: 8),
           const Padding(
             padding: EdgeInsets.only(bottom: 4),
-            child: Text('przerw / godz. snu', style: TextStyle(color: C.muted)),
+            child: Text('zdarzeń / godz. snu', style: TextStyle(color: C.muted)),
           ),
         ]),
         const SizedBox(height: 6),
         Text(
-          enough
-              ? 'Wskaźnik ${apneaCategory(idx)} · ${night.apneaCount} '
-                  '${plural(night.apneaCount, 'przerwa', 'przerwy', 'przerw')} ≥10 s zakończonych westchnieniem lub chrapnięciem'
-              : 'Za krótka noc na wiarygodny wskaźnik (potrzeba min. 2 h snu).',
+          !enough
+              ? 'Za krótka noc na wiarygodny wskaźnik (potrzeba min. 2 h snu).'
+              : night.sonar
+                  ? 'Wskaźnik ${apneaCategory(idx)} · sonar: ${night.apneaCount} '
+                      '${plural(night.apneaCount, 'przerwa', 'przerwy', 'przerw')} i ${night.hypopneaCount} '
+                      '${plural(night.hypopneaCount, 'spłycenie', 'spłycenia', 'spłyceń')} oddechu ≥10 s'
+                      '${night.breathRate != null ? ' · średnio ${night.breathRate!.toStringAsFixed(1)} oddechu/min' : ''}'
+                  : night.cpap
+                      ? 'Noc z CPAP: dźwiękowy detektor przerw jest wyłączony (szum aparatu). '
+                          'Wiarygodny wskaźnik daje sam aparat — patrz karta CPAP — albo sonar.'
+                      : 'Wskaźnik ${apneaCategory(idx)} · ${night.apneaCount} '
+                          '${plural(night.apneaCount, 'przerwa', 'przerwy', 'przerw')} ≥10 s zakończonych westchnieniem lub chrapnięciem',
           style: const TextStyle(fontSize: 13),
         ),
         const SizedBox(height: 10),
@@ -220,9 +316,9 @@ class _NightDetailScreenState extends State<NightDetailScreen> {
           ),
         ),
         const Text(
-          'To orientacyjne wskazanie na podstawie dźwięku, nie diagnoza. Wykrywane są głównie przerwy u osób, '
-          'które chrapią. Jeśli wskaźnik często przekracza 15, ktoś zauważa u Ciebie przerwy w oddychaniu albo '
-          'budzisz się niewyspany — porozmawiaj z lekarzem o badaniu snu (poligrafia/polisomnografia).',
+          'To orientacyjne wskazanie, nie diagnoza. Bez sonaru wykrywane są głównie przerwy u osób, które chrapią. '
+          'Jeśli wskaźnik często przekracza 15, ktoś zauważa u Ciebie przerwy w oddychaniu albo budzisz się '
+          'niewyspany — porozmawiaj z lekarzem o badaniu snu (poligrafia/polisomnografia).',
           style: TextStyle(fontSize: 11, color: C.muted),
         ),
       ]),
@@ -272,11 +368,21 @@ class _NightDetailScreenState extends State<NightDetailScreen> {
                 const SizedBox(width: 18),
                 Expanded(
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text('💨 ${night.fartCount}',
-                        style: const TextStyle(fontSize: 40, fontWeight: FontWeight.w800, color: C.gas, height: 1)),
-                    Text(plural(night.fartCount, 'bąk', 'bąki', 'bąków'), style: const TextStyle(color: C.gas)),
-                    const SizedBox(height: 6),
-                    Text('${durHM(night.durationMin)} snu', style: const TextStyle(fontSize: 16)),
+                    if (Settings.instance.detectFarts || night.fartCount > 0) ...[
+                      Text('💨 ${night.fartCount}',
+                          style: const TextStyle(fontSize: 40, fontWeight: FontWeight.w800, color: C.gas, height: 1)),
+                      Text(plural(night.fartCount, 'bąk', 'bąki', 'bąków'), style: const TextStyle(color: C.gas)),
+                      const SizedBox(height: 6),
+                      Text('${durHM(night.durationMin)} snu', style: const TextStyle(fontSize: 16)),
+                    ] else ...[
+                      Text(durHM(night.durationMin),
+                          style: const TextStyle(fontSize: 34, fontWeight: FontWeight.w800, color: C.text, height: 1)),
+                      const Text('snu', style: TextStyle(color: C.muted)),
+                      const SizedBox(height: 6),
+                    ],
+                    if (night.cpap || night.sonar)
+                      Text([if (night.cpap) '😷 CPAP', if (night.sonar) '📡 sonar'].join(' · '),
+                          style: const TextStyle(color: C.muted, fontSize: 12)),
                     Text('${hhmm(night.start)} → ${hhmm(end)} · w łóżku ${durHM(night.inBedMin)}',
                         style: const TextStyle(color: C.muted, fontSize: 12)),
                   ]),
@@ -313,10 +419,20 @@ class _NightDetailScreenState extends State<NightDetailScreen> {
             ),
             child: stepView
                 ? Hypnogram(minutes: ms)
-                : SleepWaveGraph(minutes: ms, events: evs, start: night.start, end: end),
+                : SleepWaveGraph(
+                    minutes: ms,
+                    events: evs,
+                    start: night.start,
+                    end: end,
+                    showFarts: Settings.instance.detectFarts || night.fartCount > 0),
           ),
           const SizedBox(height: 12),
+          if (night.cpap) ...[
+            _cpapCard(night),
+            const SizedBox(height: 12),
+          ],
           _breathingCard(night),
+          _breathRateCard(),
           const SizedBox(height: 12),
           TileGrid(columns: 3, children: [
             StatTile(label: 'Zasypianie', value: durHM(night.latencyMin)),
@@ -371,6 +487,7 @@ class _NightDetailScreenState extends State<NightDetailScreen> {
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Wrap(spacing: 6, children: [
                 for (final t in SoundType.values)
+                  if (t != SoundType.fart || Settings.instance.detectFarts || night.fartCount > 0)
                   ChoiceChip(
                     label: Text('${t.emoji} ${evs.where((e) => e.type == t && e.clipPath != null).length}'),
                     selected: filter == t,

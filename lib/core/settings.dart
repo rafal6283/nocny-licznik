@@ -71,6 +71,23 @@ class Settings extends ChangeNotifier {
   set fartSensitivity(double v) => _set('sensFart', v);
   double get snoreSensitivity => _d('sensSnore', 0.5);
   set snoreSensitivity(double v) => _set('sensSnore', v);
+  /// Liczenie wiatrów — opcjonalne, domyślnie wyłączone.
+  bool get detectFarts => _b('detectFarts', false);
+  set detectFarts(bool v) => _set('detectFarts', v);
+
+  /// Sonar (Android): niesłyszalny ton 19 kHz do pomiaru oddechu bez kontaktu.
+  bool get sonarEnabled => _b('sonar', false);
+  set sonarEnabled(bool v) => _set('sonar', v);
+  /// Źródło mikrofonu dla sonaru: 'unprocessed' | 'voiceRecognition' | 'mic' | 'defaultSource'
+  String get sonarSource => _s('sonarSource', 'unprocessed');
+  set sonarSource(String v) => _set('sonarSource', v);
+  double get sonarVolume => _d('sonarVol', 0.6);
+  set sonarVolume(double v) => _set('sonarVol', v);
+
+  /// Tryb CPAP — zapamiętany wybór na kolejne noce.
+  bool get cpapDefault => _b('cpap', false);
+  set cpapDefault(bool v) => _set('cpap', v);
+
   bool get detectTalk => _b('detectTalk', true);
   set detectTalk(bool v) => _set('detectTalk', v);
   bool get detectCough => _b('detectCough', true);
