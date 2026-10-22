@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../core/db.dart';
+import '../core/exchange_export.dart';
 import '../core/fmt.dart';
 import '../core/reminders.dart';
 import '../core/settings.dart';
@@ -228,6 +230,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 if (mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Usunięto nagrania: $n')));
                 }
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.ios_share),
+              title: const Text('Eksport wiatrów do Kreski'),
+              subtitle: const Text('Plik do porównania z ręcznymi wpisami FF (cała historia)'),
+              onTap: () async {
+                final x = await exportFartExchange();
+                if (!mounted) return;
+                ScaffoldMessenger.of(context)
+                    .showSnackBar(SnackBar(content: Text('Noce: ${x.nights} · wiatry: ${x.farts}')));
+                await SharePlus.instance
+                    .share(ShareParams(files: [XFile(x.file.path)], subject: 'Nocny Licznik – wiatry'));
               },
             ),
             const ListTile(

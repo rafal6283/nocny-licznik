@@ -17,6 +17,7 @@ dependencies:
   path: any
   shared_preferences: any
   just_audio: any
+  share_plus: ^13.0.0
   bakometr_native:
     path: packages/bakometr_native
 
