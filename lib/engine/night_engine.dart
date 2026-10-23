@@ -18,6 +18,7 @@ import '../core/fmt.dart';
 import '../core/health_sync.dart';
 import '../core/weather.dart';
 import '../core/models.dart';
+import '../core/night_log.dart';
 import '../core/settings.dart';
 import 'classifier.dart';
 import 'sleep_analysis.dart';
@@ -230,7 +231,13 @@ class NightEngine extends ChangeNotifier {
     state = NightState.tracking;
     notifyListeners();
 
-    await BakometrNative.startTracking(title: 'Nocny Licznik nasłuchuje', text: 'Dobranoc 🌙');
+    final fgsError = await BakometrNative.startTracking(title: 'Nocny Licznik nasłuchuje', text: 'Dobranoc 🌙');
+    final dev = await BakometrNative.deviceInfo();
+    final battOpt = await BakometrNative.batteryOptimized();
+    journal('START noc #${night!.id} · ${dev['manufacturer'] ?? ''} ${dev['model'] ?? ''} (SDK ${dev['sdk'] ?? '?'}) · '
+        'usługa w tle: ${fgsError ?? 'OK'} · optymalizacja baterii: ${battOpt == null ? '?' : (battOpt ? 'WŁĄCZONA (ryzyko)' : 'wyłączona')} · '
+        'CPAP: ${plan.cpap} · wiatry: ${_s.detectFarts} · budzik: ${plan.alarmAt != null ? hhmm(plan.alarmAt!) : '—'}');
+    if (fgsError != null) lastError = fgsError;
     if (_s.keepScreenOn) await BakometrNative.setKeepScreenOn(true);
 
     // Model ładujemy raz; jeśli go brak, noc i tak się nagrywa (ruch, światło, głośność).
@@ -311,6 +318,8 @@ class NightEngine extends ChangeNotifier {
       _luxTimer = Timer.periodic(Duration(seconds: _s.luxIntervalSec), (_) => measureLuxNow());
     }
 
+    journal('mikrofon: ${_audioSub != null ? 'OK' : 'BŁĄD'}${sonarActive ? ' · sonar 48 kHz' : ''}'
+        '${sonarNote != null ? ' · $sonarNote' : ''}${lastError != null ? ' · błąd: $lastError' : ''}');
     _minuteTimer = Timer.periodic(const Duration(minutes: 1), (_) => _flushMinute());
     _alarmTimer = Timer.periodic(const Duration(seconds: 15), (_) => _checkAlarm());
 
@@ -487,6 +496,7 @@ class NightEngine extends ChangeNotifier {
       if (micBlocked) _blockedHops++;
       if (!micBlocked && _zeroHops >= 240 && state == NightState.tracking) {
         micBlocked = true;
+        journal('mikrofon zajęty przez inną aplikację (cyfrowa cisza)');
         _blockedHops += _zeroHops;
         BakometrNative.updateTracking('⚠️ Mikrofon zajęty przez inną aplikację — dźwięki nie są liczone');
         notifyListeners();
@@ -736,7 +746,7 @@ class NightEngine extends ChangeNotifier {
     final n = night;
     if (n?.id == null || state == NightState.idle) return;
     final m = MinuteSample(
-      idx: _minuteIdx++,
+      idx: _minuteIdx,
       ts: DateTime.now(),
       motion: _minMotion,
       noiseDb: _minNoiseN > 0 ? 10 * log(_minNoiseSum / _minNoiseN + 1e-18) / ln10 : -200,
@@ -757,6 +767,12 @@ class NightEngine extends ChangeNotifier {
     _luxFresh = false;
     _resetMinute();
     minutes.add(m);
+    _minuteIdx++;
+    if (_minuteIdx % 15 == 0) {
+      journal('żyje · minuta $_minuteIdx · ${Settings.instance.spl(m.noiseDb).round()} dB'
+          '${sonarActive ? ' · sonar ${(sonar?.quality ?? -99).round()} dB' : ''}'
+          '${micBlocked ? ' · mikrofon zajęty' : ''}');
+    }
     await Db.instance.insertMinute(n!.id!, m);
     if (minutes.length % 5 == 0) {
       BakometrNative.updateTracking(statusText());
@@ -792,6 +808,7 @@ class NightEngine extends ChangeNotifier {
   Future<void> ring(String reason) async {
     if (state == NightState.ringing) return;
     state = NightState.ringing;
+    journal('BUDZIK: $reason');
     ringReason = reason;
     ringingSince = DateTime.now();
     analysisActive = false;
@@ -843,8 +860,12 @@ class NightEngine extends ChangeNotifier {
   }
 
   /// Budzik wyłączony (po zadaniu) albo noc zatrzymana ręcznie → zapis i analiza.
-  Future<Night?> finish() async {
+  /// Zapis do dziennika bieżącej nocy.
+  void journal(String line) => NightLog.add(night?.id, line);
+
+  Future<Night?> finish({String reason = 'zakończona przez użytkownika'}) async {
     if (state == NightState.idle) return null;
+    journal('KONIEC: $reason · minut: ${minutes.length}');
     state = NightState.finishing;
     notifyListeners();
     await _silenceAlarm();
@@ -931,11 +952,22 @@ class NightEngine extends ChangeNotifier {
 
   /// Przy starcie aplikacji: domyka noce przerwane przez system (np. ubicie procesu).
   static Future<void> recoverUnfinished() async {
-    for (final n in await Db.instance.unfinishedNights()) {
+    final unfinished = await Db.instance.unfinishedNights();
+    if (unfinished.isEmpty) return;
+    final exits = [for (final m in await BakometrNative.exitReasons()) ExitReason.fromMap(m)];
+    for (final n in unfinished) {
       if (NightEngine.instance.night?.id == n.id) continue;
       final ms = await Db.instance.minutes(n.id!);
       final evs = await Db.instance.events(n.id!);
       n.end = ms.isNotEmpty ? ms.last.ts : n.start;
+      // Powód: pierwsze zakończenie procesu po ostatniej zapisanej minucie.
+      final after = exits.where((e) => e.isKill && e.ts.isAfter(n.end!.subtract(const Duration(minutes: 2)))).toList()
+        ..sort((a, b) => a.ts.compareTo(b.ts));
+      n.interruptReason = after.isNotEmpty
+          ? after.first.text
+          : 'ok. ${hhmm(n.end!)} — aplikacja przestała działać; Android nie podał przyczyny '
+              '(zwykle oszczędzanie baterii albo wyczyszczenie z ostatnich aplikacji)';
+      await NightLog.add(n.id, 'PRZERWANA: ${n.interruptReason}');
       await summarize(n, ms, evs);
     }
   }

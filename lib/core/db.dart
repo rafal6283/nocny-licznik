@@ -4,6 +4,7 @@ import 'package:path/path.dart' as p;
 import 'package:sqflite/sqflite.dart';
 
 import 'models.dart';
+import 'night_log.dart';
 
 class Db {
   Db._();
@@ -17,7 +18,7 @@ class Db {
     final dir = await getDatabasesPath();
     return openDatabase(
       p.join(dir, 'bakometr.db'),
-      version: 5,
+      version: 6,
       onUpgrade: (db, from, to) async {
         if (from < 2) {
           await db.execute('ALTER TABLE nights ADD COLUMN apnea_count INTEGER');
@@ -55,6 +56,9 @@ class Db {
           for (final c in ['w_temp', 'w_hum', 'w_press', 'w_press_trend', 'w_wind', 'w_rain', 'w_cloud', 'moon_phase']) {
             await db.execute('ALTER TABLE nights ADD COLUMN $c REAL');
           }
+        }
+        if (from < 6) {
+          await db.execute('ALTER TABLE nights ADD COLUMN interrupt_reason TEXT');
         }
       },
       onCreate: (db, v) async {
@@ -102,6 +106,7 @@ class Db {
             w_rain REAL,
             w_cloud REAL,
             moon_phase REAL,
+            interrupt_reason TEXT,
             avg_lux REAL,
             max_lux REAL
           )''');
@@ -177,6 +182,7 @@ class Db {
     await d.delete('events', where: 'night_id = ?', whereArgs: [id]);
     await d.delete('minutes', where: 'night_id = ?', whereArgs: [id]);
     await d.delete('nights', where: 'id = ?', whereArgs: [id]);
+    await NightLog.delete(id);
   }
 
   // ---- zdarzenia ----

@@ -1,6 +1,15 @@
 package pl.rafal.bakometr_native;
 
 import android.app.Activity;
+import android.app.ActivityManager;
+import android.app.ApplicationExitInfo;
+import android.net.Uri;
+import android.os.PowerManager;
+import android.provider.Settings;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import android.app.Notification;
 import android.app.NotificationManager;
 import android.content.Context;
@@ -61,10 +70,54 @@ public class BakometrNativePlugin implements FlutterPlugin, MethodChannel.Method
                 Intent i = new Intent(ctx, TrackingService.class);
                 i.putExtra(TrackingService.EXTRA_TITLE, trackingTitle);
                 i.putExtra(TrackingService.EXTRA_TEXT, text);
-                ctx.startForegroundService(i);
+                try {
+                    ctx.startForegroundService(i);
+                } catch (Exception e) {
+                    // Bez usługi pierwszoplanowej system uśpi/zamknie aplikację w nocy — zgłaszamy to.
+                    result.success("Nie udało się uruchomić usługi w tle: " + e);
+                    break;
+                }
                 // Ekran nocy i budzika ma być widoczny bez odblokowania telefonu.
                 if (activity != null && Build.VERSION.SDK_INT >= 27) activity.setShowWhenLocked(true);
                 result.success(null);
+                break;
+            }
+            case "exitReasons":
+                result.success(exitReasons());
+                break;
+            case "batteryOptimized": {
+                PowerManager pm = (PowerManager) ctx.getSystemService(Context.POWER_SERVICE);
+                result.success(pm != null && !pm.isIgnoringBatteryOptimizations(ctx.getPackageName()));
+                break;
+            }
+            case "requestIgnoreBatteryOptimizations": {
+                try {
+                    Intent b = new Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                            Uri.parse("package:" + ctx.getPackageName()));
+                    b.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                    ctx.startActivity(b);
+                } catch (Exception e) {
+                    Intent b = new Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS);
+                    b.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                    try { ctx.startActivity(b); } catch (Exception ignored) {}
+                }
+                result.success(null);
+                break;
+            }
+            case "openAppSettings": {
+                Intent a = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                        Uri.parse("package:" + ctx.getPackageName()));
+                a.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                try { ctx.startActivity(a); } catch (Exception ignored) {}
+                result.success(null);
+                break;
+            }
+            case "deviceInfo": {
+                Map<String, Object> m = new HashMap<>();
+                m.put("manufacturer", Build.MANUFACTURER);
+                m.put("model", Build.MODEL);
+                m.put("sdk", Build.VERSION.SDK_INT);
+                result.success(m);
                 break;
             }
             case "updateTracking": {
@@ -149,6 +202,26 @@ public class BakometrNativePlugin implements FlutterPlugin, MethodChannel.Method
             default:
                 result.notImplemented();
         }
+    }
+
+    /** Ostatnie powody zakończenia procesu aplikacji (Android 11+). */
+    private List<Map<String, Object>> exitReasons() {
+        List<Map<String, Object>> out = new ArrayList<>();
+        if (Build.VERSION.SDK_INT < 30) return out;
+        ActivityManager am = (ActivityManager) ctx.getSystemService(Context.ACTIVITY_SERVICE);
+        if (am == null) return out;
+        List<ApplicationExitInfo> list = am.getHistoricalProcessExitReasons(null, 0, 16);
+        for (ApplicationExitInfo e : list) {
+            Map<String, Object> m = new HashMap<>();
+            m.put("ts", e.getTimestamp());
+            m.put("reason", e.getReason());
+            m.put("description", e.getDescription() != null ? e.getDescription() : "");
+            m.put("importance", e.getImportance());
+            m.put("status", e.getStatus());
+            m.put("pss", e.getPss());
+            out.add(m);
+        }
+        return out;
     }
 
     private void measureLux(final MethodChannel.Result result) {

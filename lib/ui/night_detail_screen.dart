@@ -8,6 +8,7 @@ import '../core/bus.dart';
 import '../core/db.dart';
 import '../core/fmt.dart';
 import '../core/models.dart';
+import '../core/night_log.dart';
 import '../core/settings.dart';
 import '../core/stats_util.dart';
 import '../core/weather.dart';
@@ -142,6 +143,26 @@ class _NightDetailScreenState extends State<NightDetailScreen> {
     await Db.instance.deleteNight(widget.nightId);
     dataChanged();
     if (mounted) Navigator.pop(context);
+  }
+
+  Future<void> _showLog(Night night) async {
+    final t = await NightLog.read(night.id!);
+    if (!mounted) return;
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: C.surface,
+      builder: (c) => DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.7,
+        builder: (c, sc) => SingleChildScrollView(
+          controller: sc,
+          padding: const EdgeInsets.all(16),
+          child: SelectableText(t.isEmpty ? 'Brak dziennika dla tej nocy (zapisywany od wersji 2.4).' : t,
+              style: const TextStyle(fontSize: 11, fontFamily: 'monospace', color: C.text)),
+        ),
+      ),
+    );
   }
 
   Widget _weatherCard(Night night) {
@@ -397,7 +418,10 @@ class _NightDetailScreenState extends State<NightDetailScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(dayLabel(night.start)),
-        actions: [IconButton(onPressed: _delete, icon: const Icon(Icons.delete_outline))],
+        actions: [
+          IconButton(tooltip: 'Dziennik nocy', onPressed: () => _showLog(night), icon: const Icon(Icons.receipt_long)),
+          IconButton(onPressed: _delete, icon: const Icon(Icons.delete_outline)),
+        ],
       ),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
@@ -433,6 +457,21 @@ class _NightDetailScreenState extends State<NightDetailScreen> {
               StageBar(n: night),
             ]),
           ),
+          if (night.interruptReason != null) ...[
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(color: const Color(0xFF3A1020), borderRadius: BorderRadius.circular(16)),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text('⚠️ Noc przerwana: ${night.interruptReason}',
+                    style: const TextStyle(color: Colors.white, fontSize: 13)),
+                const SizedBox(height: 4),
+                const Text('Zapis kończy się na ostatniej minucie przed zamknięciem aplikacji.',
+                    style: TextStyle(color: Colors.white70, fontSize: 11)),
+                TextButton(onPressed: () => _showLog(night), child: const Text('Dziennik nocy')),
+              ]),
+            ),
+          ],
           if (night.micBlockedMin > 0) ...[
             const SizedBox(height: 12),
             Container(

@@ -14,6 +14,7 @@ import '../core/health_sync.dart';
 import '../core/reminders.dart';
 import '../core/settings.dart';
 import '../core/weather.dart';
+import 'diagnostics_screen.dart';
 import 'sonar_test_screen.dart';
 import 'theme.dart';
 
@@ -409,6 +410,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ]),
         ),
 
+        _head('Diagnostyka'),
+        Card(
+          child: ListTile(
+            leading: const Icon(Icons.health_and_safety_outlined),
+            title: const Text('Praca w tle i przerwane noce'),
+            subtitle: const Text('Optymalizacja baterii, powody zamknięcia aplikacji przez system'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const DiagnosticsScreen())),
+          ),
+        ),
+
         _head('Tagi'),
         Card(
           child: ListTile(
@@ -470,7 +482,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ]),
         ),
         const SizedBox(height: 16),
-        const Center(child: Text('Nocny Licznik 2.3', style: TextStyle(color: C.muted, fontSize: 12))),
+        const Center(child: Text('Nocny Licznik 2.4', style: TextStyle(color: C.muted, fontSize: 12))),
       ],
     );
   }

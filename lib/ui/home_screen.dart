@@ -11,6 +11,7 @@ import '../core/settings.dart';
 import '../core/stats_util.dart';
 import '../engine/night_engine.dart';
 import 'charts.dart';
+import 'diagnostics_screen.dart';
 import 'theme.dart';
 
 const lullabies = {
@@ -31,8 +32,9 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   final s = Settings.instance;
+  bool battOpt = false;
   List<Night> recent = [];
   double? lux;
   bool measuring = false;
@@ -43,6 +45,7 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     s.addListener(_refresh);
     dataVersion.addListener(_load);
+    WidgetsBinding.instance.addObserver(this);
     _load();
   }
 
@@ -50,7 +53,19 @@ class _HomeScreenState extends State<HomeScreen> {
   void dispose() {
     s.removeListener(_refresh);
     dataVersion.removeListener(_load);
+    WidgetsBinding.instance.removeObserver(this);
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState st) {
+    if (st == AppLifecycleState.resumed) _checkBattery();
+  }
+
+  Future<void> _checkBattery() async {
+    if (!Platform.isAndroid) return;
+    final b = await BakometrNative.batteryOptimized() ?? false;
+    if (mounted && b != battOpt) setState(() => battOpt = b);
   }
 
   void _refresh() => setState(() {});
@@ -58,6 +73,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _load() async {
     final r = await Db.instance.nights(limit: 30);
     if (mounted) setState(() => recent = r);
+    await _checkBattery();
   }
 
   Future<void> _pickAlarm() async {
@@ -127,6 +143,47 @@ class _HomeScreenState extends State<HomeScreen> {
         Text(greet, style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700)),
         Text(dayLabel(DateTime.now()), style: const TextStyle(color: C.muted)),
         const SizedBox(height: 16),
+        if (recent.isNotEmpty && recent.first.interruptReason != null &&
+            DateTime.now().difference(recent.first.start).inHours < 20)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: InkWell(
+              onTap: () => widget.onOpenNight(recent.first.id!),
+              child: Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(color: const Color(0xFF3A1020), borderRadius: BorderRadius.circular(16)),
+                child: Text('⚠️ Ostatnia noc została przerwana: ${recent.first.interruptReason}',
+                    style: const TextStyle(color: Colors.white, fontSize: 13)),
+              ),
+            ),
+          ),
+        if (battOpt)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(color: const Color(0xFF3A2A10), borderRadius: BorderRadius.circular(16)),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                const Text(
+                  '🔋 Optymalizacja baterii jest włączona — system może w nocy zamknąć nagrywanie i zapis się urwie.',
+                  style: TextStyle(color: C.moon, fontSize: 13),
+                ),
+                const SizedBox(height: 8),
+                Row(children: [
+                  FilledButton(
+                    onPressed: BakometrNative.requestIgnoreBatteryOptimizations,
+                    child: const Text('Wyłącz dla aplikacji'),
+                  ),
+                  const SizedBox(width: 8),
+                  TextButton(
+                    onPressed: () => Navigator.push(
+                        context, MaterialPageRoute(builder: (_) => const DiagnosticsScreen())),
+                    child: const Text('Więcej'),
+                  ),
+                ]),
+              ]),
+            ),
+          ),
 
         // --- Budzik ---
         Section(

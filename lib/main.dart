@@ -19,7 +19,13 @@ final navigatorKey = GlobalKey<NavigatorState>();
 /// Błędy złapane w czasie działania — pokazywane na ekranie zamiast cichego zawieszenia.
 final startupLog = ValueNotifier<List<String>>([]);
 
-void _log(String s) => startupLog.value = [...startupLog.value, s];
+void _log(String s) {
+  startupLog.value = [...startupLog.value, s];
+  // Błędy w trakcie nocy trafiają też do dziennika nocy.
+  if (s.startsWith('BŁĄD') && NightEngine.instance.isActive) {
+    NightEngine.instance.journal(s.split('\n').take(3).join(' | '));
+  }
+}
 
 void main() {
   runZonedGuarded(() {
@@ -163,13 +169,14 @@ class _RootState extends State<Root> with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState s) {
     if (s == AppLifecycleState.resumed) engine.onResumed();
+    if (engine.isActive) engine.journal('aplikacja: ${s.name}');
   }
 
   void _onEngine() => setState(() {});
 
   /// Zakończenie nocy (z ekranu nocy lub po wyłączeniu budzika) → podsumowanie.
-  Future<void> _finish() async {
-    final n = await engine.finish();
+  Future<void> _finish({String reason = 'zakończona przez użytkownika'}) async {
+    final n = await engine.finish(reason: reason);
     if (n?.id != null && mounted) {
       navigatorKey.currentState?.push(MaterialPageRoute(builder: (_) => NightDetailScreen(nightId: n!.id!)));
     }
@@ -179,7 +186,7 @@ class _RootState extends State<Root> with WidgetsBindingObserver {
   Widget build(BuildContext context) {
     switch (engine.state) {
       case NightState.ringing:
-        return AlarmScreen(onDismissed: _finish);
+        return AlarmScreen(onDismissed: () => _finish(reason: 'budzik wyłączony'));
       case NightState.tracking:
       case NightState.snoozed:
       case NightState.finishing:
