@@ -16,6 +16,7 @@ import '../core/bus.dart';
 import '../core/db.dart';
 import '../core/fmt.dart';
 import '../core/health_sync.dart';
+import '../core/weather.dart';
 import '../core/models.dart';
 import '../core/settings.dart';
 import 'classifier.dart';
@@ -880,6 +881,9 @@ class NightEngine extends ChangeNotifier {
     n.end = DateTime.now();
     n.micBlockedMin = _blockedHops ~/ 120;
     await summarize(n, minutes, liveEvents);
+    unawaited(WeatherService.fetchFor(n).then((ok) {
+      if (ok) dataChanged();
+    }));
 
     state = NightState.idle;
     night = null;

@@ -10,6 +10,7 @@ import '../core/fmt.dart';
 import '../core/models.dart';
 import '../core/settings.dart';
 import '../core/stats_util.dart';
+import '../core/weather.dart';
 import '../engine/night_engine.dart';
 import 'charts.dart';
 import 'theme.dart';
@@ -141,6 +142,46 @@ class _NightDetailScreenState extends State<NightDetailScreen> {
     await Db.instance.deleteNight(widget.nightId);
     dataChanged();
     if (mounted) Navigator.pop(context);
+  }
+
+  Widget _weatherCard(Night night) {
+    String f(double? v, String unit, [int dec = 0]) => v == null ? '—' : '${v.toStringAsFixed(dec)}$unit';
+    final trend = night.wPressTrend;
+    final mp = night.moonPhase;
+    return Section(
+      title: 'Pogoda tej nocy 🌦️',
+      trailing: Settings.instance.weatherPlace.isNotEmpty
+          ? Text(Settings.instance.weatherPlace, style: const TextStyle(color: C.muted, fontSize: 12))
+          : null,
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        if (night.wTemp != null)
+          TileGrid(columns: 3, children: [
+            StatTile(label: 'Temperatura', value: f(night.wTemp, '°C', 1), color: const Color(0xFFFF9E7A)),
+            StatTile(label: 'Wilgotność', value: f(night.wHum, '%')),
+            StatTile(
+              label: 'Ciśnienie',
+              value: f(night.wPress, ' hPa'),
+              sub: trend == null
+                  ? null
+                  : '${trend >= 0 ? '↑' : '↓'} ${trend.abs().toStringAsFixed(1)} hPa / 24 h',
+              color: const Color(0xFFB59BFF),
+            ),
+            StatTile(label: 'Wiatr maks.', value: f(night.wWind, ' km/h')),
+            StatTile(label: 'Opady', value: f(night.wRain, ' mm', 1), color: C.light),
+            StatTile(label: 'Zachmurzenie', value: f(night.wCloud, '%')),
+          ])
+        else
+          const Text('Brak danych pogodowych — ustaw miejscowość w Ustawieniach → Pogoda.',
+              style: TextStyle(color: C.muted, fontSize: 12)),
+        if (mp != null) ...[
+          const SizedBox(height: 10),
+          Text(
+              '${WeatherService.moonEmoji(mp)} Księżyc: ${WeatherService.moonName(mp)} · '
+              'oświetlenie ${(WeatherService.illumination(mp) * 100).round()}%',
+              style: const TextStyle(fontSize: 13)),
+        ],
+      ]),
+    );
   }
 
   Widget _noiseCard(Night night) {
@@ -468,6 +509,10 @@ class _NightDetailScreenState extends State<NightDetailScreen> {
           if (hasLux) const SizedBox(height: 12),
           if (night.avgNoise != null) ...[
             _noiseCard(night),
+            const SizedBox(height: 12),
+          ],
+          if (night.wTemp != null || night.moonPhase != null) ...[
+            _weatherCard(night),
             const SizedBox(height: 12),
           ],
           if (farts.isNotEmpty)

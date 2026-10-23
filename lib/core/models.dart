@@ -69,6 +69,15 @@ class Night {
   double? cpapAhi; // AHI odczytane z aparatu
   double? cpapLeak; // nieszczelność maski z aparatu, l/min
   int? cpapUsageMin; // czas użycia aparatu
+  // Pogoda w nocy (Open-Meteo) i Księżyc
+  double? wTemp; // °C, średnia
+  double? wHum; // %, średnia
+  double? wPress; // hPa, średnie ciśnienie
+  double? wPressTrend; // hPa, zmiana ciśnienia w 24 h przed snem
+  double? wWind; // km/h, maks.
+  double? wRain; // mm, suma
+  double? wCloud; // %, średnie zachmurzenie
+  double? moonPhase; // 0 = nów, 0,5 = pełnia
   double? avgNoise; // hałas otoczenia: Leq nocy w dBFS (dB SPL = + kalibracja)
   double? maxNoise; // najgłośniejsze 0,5 s nocy w dBFS
   double? avgLux;
@@ -109,6 +118,14 @@ class Night {
     this.cpapAhi,
     this.cpapLeak,
     this.cpapUsageMin,
+    this.wTemp,
+    this.wHum,
+    this.wPress,
+    this.wPressTrend,
+    this.wWind,
+    this.wRain,
+    this.wCloud,
+    this.moonPhase,
     this.avgLux,
     this.maxLux,
   }) : tags = tags ?? [];
@@ -149,6 +166,14 @@ class Night {
         'cpap_ahi': cpapAhi,
         'cpap_leak': cpapLeak,
         'cpap_usage_min': cpapUsageMin,
+        'w_temp': wTemp,
+        'w_hum': wHum,
+        'w_press': wPress,
+        'w_press_trend': wPressTrend,
+        'w_wind': wWind,
+        'w_rain': wRain,
+        'w_cloud': wCloud,
+        'moon_phase': moonPhase,
         'max_noise': maxNoise,
         'avg_lux': avgLux,
         'max_lux': maxLux,
@@ -190,6 +215,14 @@ class Night {
         cpapAhi: (m['cpap_ahi'] as num?)?.toDouble(),
         cpapLeak: (m['cpap_leak'] as num?)?.toDouble(),
         cpapUsageMin: m['cpap_usage_min'] as int?,
+        wTemp: (m['w_temp'] as num?)?.toDouble(),
+        wHum: (m['w_hum'] as num?)?.toDouble(),
+        wPress: (m['w_press'] as num?)?.toDouble(),
+        wPressTrend: (m['w_press_trend'] as num?)?.toDouble(),
+        wWind: (m['w_wind'] as num?)?.toDouble(),
+        wRain: (m['w_rain'] as num?)?.toDouble(),
+        wCloud: (m['w_cloud'] as num?)?.toDouble(),
+        moonPhase: (m['moon_phase'] as num?)?.toDouble(),
         maxNoise: (m['max_noise'] as num?)?.toDouble(),
         avgLux: (m['avg_lux'] as num?)?.toDouble(),
         maxLux: (m['max_lux'] as num?)?.toDouble(),

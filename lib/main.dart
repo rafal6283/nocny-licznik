@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import 'core/settings.dart';
+import 'core/weather.dart';
 import 'engine/night_engine.dart';
 import 'ui/alarm_screen.dart';
 import 'ui/history_screen.dart';
@@ -72,6 +73,7 @@ class _BakometrAppState extends State<BakometrApp> {
     try {
       await _run('Ustawienia', Settings.instance.load);
       await _run('Baza danych', NightEngine.recoverUnfinished, required: false);
+      unawaited(WeatherService.backfill());
       setState(() => ready = true);
     } catch (_) {
       setState(() => step = 'Start nie powiódł się');

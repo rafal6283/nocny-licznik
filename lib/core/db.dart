@@ -17,7 +17,7 @@ class Db {
     final dir = await getDatabasesPath();
     return openDatabase(
       p.join(dir, 'bakometr.db'),
-      version: 4,
+      version: 5,
       onUpgrade: (db, from, to) async {
         if (from < 2) {
           await db.execute('ALTER TABLE nights ADD COLUMN apnea_count INTEGER');
@@ -49,6 +49,11 @@ class Db {
           }
           for (final c in ['breath_rate REAL', 'breath_var REAL', 'sonar_motion REAL']) {
             await db.execute('ALTER TABLE minutes ADD COLUMN $c');
+          }
+        }
+        if (from < 5) {
+          for (final c in ['w_temp', 'w_hum', 'w_press', 'w_press_trend', 'w_wind', 'w_rain', 'w_cloud', 'moon_phase']) {
+            await db.execute('ALTER TABLE nights ADD COLUMN $c REAL');
           }
         }
       },
@@ -89,6 +94,14 @@ class Db {
             cpap_ahi REAL,
             cpap_leak REAL,
             cpap_usage_min INTEGER,
+            w_temp REAL,
+            w_hum REAL,
+            w_press REAL,
+            w_press_trend REAL,
+            w_wind REAL,
+            w_rain REAL,
+            w_cloud REAL,
+            moon_phase REAL,
             avg_lux REAL,
             max_lux REAL
           )''');

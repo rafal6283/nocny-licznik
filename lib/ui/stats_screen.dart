@@ -7,6 +7,7 @@ import '../core/metrics.dart';
 import '../core/models.dart';
 import '../core/settings.dart';
 import '../core/stats_util.dart';
+import '../core/weather_impact.dart';
 import 'charts.dart';
 import 'metric_detail_screen.dart';
 import 'theme.dart';
@@ -95,6 +96,7 @@ class _StatsScreenState extends State<StatsScreen> {
       farts: showFarts,
       cpap: chrono.any((n) => n.cpapAhi != null),
       breath: chrono.any((n) => n.breathRate != null),
+      weather: chrono.any((n) => n.wTemp != null),
     );
     final nights = _rangeNights();
 
@@ -333,7 +335,84 @@ class _StatsScreenState extends State<StatsScreen> {
                   if (noiseBuckets[b] != null) compareRow(noiseLabels[b]!, noiseBuckets[b]!),
               ]),
       ),
+      const SizedBox(height: 12),
+      _weatherSection(showFarts),
     ];
+  }
+
+  /// Pogoda a sen: noce z najniższą vs najwyższą 1/3 wartości każdego czynnika (wszystkie noce).
+  Widget _weatherSection(bool showFarts) {
+    final s = Settings.instance;
+    final withWeather = chrono.where((n) => n.wTemp != null).length;
+    Widget body;
+    if (!s.weatherReady && withWeather == 0) {
+      body = const Text(
+          'Ustaw swoją miejscowość w Ustawieniach → Pogoda. Aplikacja pobierze warunki dla każdej nocy '
+          '(także wstecz) i pokaże, jak temperatura, ciśnienie, wilgotność, wiatr czy Księżyc łączą się z Twoim snem.',
+          style: TextStyle(color: C.muted));
+    } else {
+      final impacts = weatherImpacts(chrono, farts: showFarts);
+      if (impacts.isEmpty) {
+        body = Text(
+            'Potrzeba co najmniej 6 nocy z danymi pogodowymi (teraz: $withWeather). '
+            'Pogoda pobiera się automatycznie po każdej nocy.',
+            style: const TextStyle(color: C.muted));
+      } else {
+        final top = impacts.first;
+        final e = top.score;
+        body = Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          if (top.strength >= 0.15)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              margin: const EdgeInsets.only(bottom: 10),
+              decoration: BoxDecoration(color: C.surface2, borderRadius: BorderRadius.circular(14)),
+              child: Text(
+                '${top.factor.emoji} Najmocniej: ${top.factor.label.toLowerCase()} — '
+                '${e.highBetter ? top.factor.highWord : top.factor.lowWord} = lepszy sen '
+                '(ocena ${e.outcome.fmtDelta(e.highBetter ? e.delta : -e.delta)}, ${strengthWord(e.r)}).',
+                style: const TextStyle(fontWeight: FontWeight.w600, height: 1.35),
+              ),
+            ),
+          for (final f in impacts) _factorRow(f),
+          const SizedBox(height: 6),
+          const Text(
+            'Porównanie nocy z najniższą i najwyższą 1/3 wartości (opady: noce suche vs deszczowe). Korelacja to nie '
+            'przyczyna — przy kilkunastu nocach traktuj to jako wskazówkę. Pogoda: Open-Meteo, Księżyc liczony lokalnie.',
+            style: TextStyle(fontSize: 11, color: C.muted),
+          ),
+        ]);
+      }
+    }
+    return Section(title: 'Pogoda a sen 🌦️', child: body);
+  }
+
+  Widget _factorRow(FactorImpact f) {
+    final f0 = f.factor;
+    final range = f0.id == 'rain'
+        ? 'sucho vs deszcz'
+        : '≤ ${f0.fmt(f.lowMax)} vs ≥ ${f0.fmt(f.highMin)}';
+    Color col(OutcomeEffect e) =>
+        e.r.abs() < 0.15 ? C.muted : (e.highBetter ? C.gas : C.danger);
+    final shown = f.effects.where((e) => e.outcome.id == 'score' || e.outcome.id == 'sleep' || e.r.abs() >= 0.3);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 7),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Text('${f0.emoji} ${f0.label}', style: const TextStyle(fontWeight: FontWeight.w700)),
+          const Spacer(),
+          Text('${f.nights} nocy · $range', style: const TextStyle(fontSize: 11, color: C.muted)),
+        ]),
+        const SizedBox(height: 5),
+        Wrap(spacing: 6, runSpacing: 6, children: [
+          for (final e in shown)
+            _delta('${f0.highWord}: ${e.outcome.label} ${e.outcome.fmtDelta(e.delta)}', col(e)),
+        ]),
+        const SizedBox(height: 3),
+        Text('${strengthWord(f.score.r)} z oceną snu (r = ${f.score.r.toStringAsFixed(2).replaceAll('.', ',')})',
+            style: const TextStyle(fontSize: 11, color: C.muted)),
+      ]),
+    );
   }
 
   Widget _delta(String t, Color c) => Container(

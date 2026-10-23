@@ -88,6 +88,25 @@ class Settings extends ChangeNotifier {
   bool get cpapDefault => _b('cpap', false);
   set cpapDefault(bool v) => _set('cpap', v);
 
+  // --- Pogoda ---
+  double? get weatherLat => _p.getDouble('wLat');
+  double? get weatherLon => _p.getDouble('wLon');
+  String get weatherPlace => _s('wPlace', '');
+  bool get weatherReady => weatherLat != null && weatherLon != null;
+  Future<void> setWeatherPlace(String name, double lat, double lon) async {
+    await _p.setDouble('wLat', lat);
+    await _p.setDouble('wLon', lon);
+    await _p.setString('wPlace', name);
+    notifyListeners();
+  }
+
+  Future<void> clearWeatherPlace() async {
+    await _p.remove('wLat');
+    await _p.remove('wLon');
+    await _p.remove('wPlace');
+    notifyListeners();
+  }
+
   bool get detectTalk => _b('detectTalk', true);
   set detectTalk(bool v) => _set('detectTalk', v);
   bool get detectCough => _b('detectCough', true);

@@ -93,7 +93,8 @@ Map<int, double> regularityScores(List<Night> chrono) {
   return out;
 }
 
-List<Metric> buildMetrics(Map<int, double> regularity, {bool farts = true, bool cpap = false, bool breath = false}) {
+List<Metric> buildMetrics(Map<int, double> regularity,
+    {bool farts = true, bool cpap = false, bool breath = false, bool weather = false}) {
   final s = Settings.instance;
   final all = [
     Metric(
@@ -254,8 +255,30 @@ List<Metric> buildMetrics(Map<int, double> regularity, {bool farts = true, bool 
       about: 'Wskaźnik bezdechów i spłyceń na godzinę zarejestrowany przez aparat CPAP (wpisany ręcznie albo '
           'zaimportowany z OSCAR). Cel terapii to zwykle AHI < 5.',
     ),
+    Metric(
+      id: 'w_temp',
+      title: 'Temperatura na zewnątrz',
+      color: const Color(0xFFFF9E7A),
+      kind: ChartKind.line,
+      value: (n) => n.wTemp,
+      fmt: (v) => '${v.toStringAsFixed(1)}°C',
+      zeroBased: false,
+      about: 'Średnia temperatura powietrza za oknem w czasie nocy (Open-Meteo, dla miejscowości z Ustawień).',
+    ),
+    Metric(
+      id: 'w_press',
+      title: 'Ciśnienie atmosferyczne',
+      color: const Color(0xFFB59BFF),
+      kind: ChartKind.line,
+      value: (n) => n.wPress,
+      fmt: (v) => '${v.round()} hPa',
+      zeroBased: false,
+      about: 'Średnie ciśnienie przy powierzchni w czasie nocy. Część osób gorzej śpi przy szybkim spadku ciśnienia '
+          '— zobacz „Pogoda a sen” na dole statystyk.',
+    ),
   ];
   return all.where((m) {
+    if (m.id.startsWith('w_')) return weather;
     if (m.id == 'farts') return farts;
     if (m.id == 'cpap_ahi') return cpap;
     if (m.id == 'breath_rate') return breath;

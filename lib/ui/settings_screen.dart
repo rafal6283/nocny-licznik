@@ -13,6 +13,7 @@ import '../core/fmt.dart';
 import '../core/health_sync.dart';
 import '../core/reminders.dart';
 import '../core/settings.dart';
+import '../core/weather.dart';
 import 'sonar_test_screen.dart';
 import 'theme.dart';
 
@@ -57,6 +58,77 @@ class _SettingsScreenState extends State<SettingsScreen> {
           },
         ),
       );
+
+  Future<void> _pickPlace() async {
+    final ctl = TextEditingController();
+    var results = <Place>[];
+    var busy = false;
+    String? err;
+    final picked = await showModalBottomSheet<Place>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: C.surface,
+      builder: (c) => StatefulBuilder(
+        builder: (c, set) {
+          Future<void> go() async {
+            if (ctl.text.trim().length < 2) return;
+            set(() {
+              busy = true;
+              err = null;
+            });
+            try {
+              results = await WeatherService.search(ctl.text);
+              if (results.isEmpty) err = 'Nie znaleziono.';
+            } catch (e) {
+              err = 'Brak połączenia z internetem.';
+            }
+            set(() => busy = false);
+          }
+
+          return Padding(
+            padding: EdgeInsets.fromLTRB(20, 20, 20, 20 + MediaQuery.of(c).viewInsets.bottom),
+            child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const Text('Miejscowość', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+              const SizedBox(height: 12),
+              TextField(
+                controller: ctl,
+                autofocus: true,
+                textInputAction: TextInputAction.search,
+                decoration: InputDecoration(
+                  hintText: 'np. Kraków',
+                  suffixIcon: busy
+                      ? const Padding(padding: EdgeInsets.all(12), child: CircularProgressIndicator(strokeWidth: 2))
+                      : IconButton(icon: const Icon(Icons.search), onPressed: go),
+                ),
+                onSubmitted: (_) => go(),
+              ),
+              if (err != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(err!)),
+              for (final r in results)
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: Text(r.name),
+                  subtitle: Text(r.detail),
+                  onTap: () => Navigator.pop(c, r),
+                ),
+              if (Settings.instance.weatherReady)
+                TextButton(
+                  onPressed: () async {
+                    await Settings.instance.clearWeatherPlace();
+                    if (c.mounted) Navigator.pop(c);
+                  },
+                  child: const Text('Wyłącz pogodę'),
+                ),
+            ]),
+          );
+        },
+      ),
+    );
+    if (picked == null) return;
+    await s.setWeatherPlace(picked.name, picked.lat, picked.lon);
+    _snack('Pobieram pogodę dla zapisanych nocy…');
+    final n = await WeatherService.backfill(limit: 400);
+    _snack('${picked.name}: pogoda uzupełniona dla $n ${plural(n, 'nocy', 'nocy', 'nocy')}.');
+  }
 
   Future<void> _importCpap() async {
     try {
@@ -294,6 +366,30 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
         ],
 
+        _head('Pogoda'),
+        Card(
+          child: Column(children: [
+            ListTile(
+              leading: const Text('🌦️', style: TextStyle(fontSize: 22)),
+              title: Text(s.weatherReady ? s.weatherPlace : 'Ustaw miejscowość'),
+              subtitle: const Text('Pogoda dla każdej nocy (Open-Meteo, bez konta). Wysyłane są tylko współrzędne '
+                  'miejscowości — żadne dane o śnie.'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: _pickPlace,
+            ),
+            if (s.weatherReady)
+              ListTile(
+                leading: const Icon(Icons.history),
+                title: const Text('Uzupełnij pogodę dla zapisanych nocy'),
+                onTap: () async {
+                  _snack('Pobieram pogodę…');
+                  final n = await WeatherService.backfill(limit: 400);
+                  _snack('Uzupełniono pogodę dla $n ${plural(n, 'nocy', 'nocy', 'nocy')}.');
+                },
+              ),
+          ]),
+        ),
+
         _head('CPAP'),
         Card(
           child: Column(children: [
@@ -374,7 +470,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ]),
         ),
         const SizedBox(height: 16),
-        const Center(child: Text('Nocny Licznik 2.2', style: TextStyle(color: C.muted, fontSize: 12))),
+        const Center(child: Text('Nocny Licznik 2.3', style: TextStyle(color: C.muted, fontSize: 12))),
       ],
     );
   }
