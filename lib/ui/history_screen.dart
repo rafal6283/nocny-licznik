@@ -49,7 +49,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
         ),
       );
     }
-    final record = list.map((n) => n.fartCount).reduce((a, b) => a > b ? a : b);
+    // rekord wiatrów tylko przy włączonym liczeniu — inaczej żadnych śladów, także w historii
+    final record = Settings.instance.detectFarts ? list.map((n) => n.fartCount).reduce((a, b) => a > b ? a : b) : 0;
     return ListView.separated(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
       itemCount: list.length + 1,
@@ -95,7 +96,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                   ]),
                 ),
                 Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-                  if (Settings.instance.detectFarts || n.fartCount > 0) ...[
+                  if (Settings.instance.detectFarts) ...[
                     Text('💨 ${n.fartCount}',
                         style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: C.gas)),
                     if (isRecord) const Text('🏆 rekord', style: TextStyle(fontSize: 11, color: C.moon)),

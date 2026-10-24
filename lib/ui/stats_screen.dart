@@ -90,7 +90,7 @@ class _StatsScreenState extends State<StatsScreen> {
       ]);
     }
 
-    final showFarts = Settings.instance.detectFarts || chrono.any((n) => n.fartCount > 0);
+    final showFarts = Settings.instance.detectFarts;
     final metrics = buildMetrics(
       regularityScores(chrono),
       farts: showFarts,
@@ -185,7 +185,7 @@ class _StatsScreenState extends State<StatsScreen> {
     final totalFarts = nights.fold<int>(0, (a, n) => a + n.fartCount);
     final record = nights.reduce((a, b) => a.fartCount >= b.fartCount ? a : b);
     final debt = sleepDebtMin(chrono.reversed.toList(), Settings.instance.sleepGoalMin);
-    final impacts = tagImpacts(nights);
+    final impacts = tagImpacts(nights, byFarts: showFarts);
 
     const hourOrder = [20, 21, 22, 23, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
     final byHour = List<double>.filled(hourOrder.length, 0);

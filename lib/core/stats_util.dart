@@ -29,7 +29,7 @@ class TagImpact {
   double get scoreDelta => scoreWith - scoreWithout;
 }
 
-List<TagImpact> tagImpacts(List<Night> nights) {
+List<TagImpact> tagImpacts(List<Night> nights, {bool byFarts = true}) {
   final tags = <String>{for (final n in nights) ...n.tags};
   final out = <TagImpact>[];
   for (final t in tags) {
@@ -45,7 +45,12 @@ List<TagImpact> tagImpacts(List<Night> nights) {
       avg(wo.map((n) => n.score)),
     ));
   }
-  out.sort((a, b) => b.fartDeltaPct.compareTo(a.fartDeltaPct));
+  if (byFarts) {
+    out.sort((a, b) => b.fartDeltaPct.compareTo(a.fartDeltaPct));
+  } else {
+    // bez liczenia wiatrów: najpierw tagi, które najbardziej obniżają ocenę
+    out.sort((a, b) => (a.scoreWith - a.scoreWithout).compareTo(b.scoreWith - b.scoreWithout));
+  }
   return out;
 }
 

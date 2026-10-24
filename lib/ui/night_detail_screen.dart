@@ -574,9 +574,16 @@ class _NightDetailScreenState extends State<NightDetailScreen> {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
     final end = night.end ?? (ms.isNotEmpty ? ms.last.ts : night.start);
-    final farts = evs.where((e) => e.type == SoundType.fart && e.counts).toList();
+    final farts = Settings.instance.detectFarts
+        ? evs.where((e) => e.type == SoundType.fart && e.counts).toList()
+        : <SoundEvent>[];
     final hasLux = ms.any((m) => m.lux != null);
-    final clips = evs.where((e) => e.clipPath != null && (filter == null || e.type == filter)).toList();
+    final clips = evs
+        .where((e) =>
+            e.clipPath != null &&
+            (filter == null || e.type == filter) &&
+            (e.type != SoundType.fart || Settings.instance.detectFarts))
+        .toList();
 
     // Rozkład bąków na godziny nocy
     final hours = <int>[];
@@ -613,7 +620,7 @@ class _NightDetailScreenState extends State<NightDetailScreen> {
                 const SizedBox(width: 18),
                 Expanded(
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    if (Settings.instance.detectFarts || night.fartCount > 0) ...[
+                    if (Settings.instance.detectFarts) ...[
                       Text('💨 ${night.fartCount}',
                           style: const TextStyle(fontSize: 40, fontWeight: FontWeight.w800, color: C.gas, height: 1)),
                       Text(plural(night.fartCount, 'bąk', 'bąki', 'bąków'), style: const TextStyle(color: C.gas)),
@@ -685,7 +692,7 @@ class _NightDetailScreenState extends State<NightDetailScreen> {
                     events: evs,
                     start: night.start,
                     end: end,
-                    showFarts: Settings.instance.detectFarts || night.fartCount > 0),
+                    showFarts: Settings.instance.detectFarts),
               const SizedBox(height: 6),
               Text(_sourceNote(night.stageSource), style: const TextStyle(fontSize: 11, color: C.muted)),
             ]),
@@ -759,7 +766,7 @@ class _NightDetailScreenState extends State<NightDetailScreen> {
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Wrap(spacing: 6, children: [
                 for (final t in SoundType.values)
-                  if (t != SoundType.fart || Settings.instance.detectFarts || night.fartCount > 0)
+                  if (t != SoundType.fart || Settings.instance.detectFarts)
                   ChoiceChip(
                     label: Text('${t.emoji} ${evs.where((e) => e.type == t && e.clipPath != null).length}'),
                     selected: filter == t,

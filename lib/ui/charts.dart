@@ -143,7 +143,7 @@ class _SleepWaveGraphState extends State<SleepWaveGraph> with SingleTickerProvid
       final i = (cursor! * (widget.minutes.length - 1)).round();
       final m = widget.minutes[i];
       label = '${hhmm(m.ts)} · ${m.stage.label}${m.snore ? ' · chrapanie' : ''}'
-          '${m.farts > 0 ? ' · 💨${m.farts}' : ''}${m.apneas > 0 ? ' · 🫁${m.apneas}' : ''}'
+          '${widget.showFarts && m.farts > 0 ? ' · 💨${m.farts}' : ''}${m.apneas > 0 ? ' · 🫁${m.apneas}' : ''}'
           '${m.breathRate != null ? ' · ${m.breathRate!.round()} odd./min' : ''}';
     }
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [

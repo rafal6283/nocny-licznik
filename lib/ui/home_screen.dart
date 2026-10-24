@@ -372,7 +372,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                       Text('Ostatnia noc · ${dayLabel(last.start)}', style: const TextStyle(color: C.muted, fontSize: 12)),
                       const SizedBox(height: 4),
-                      if (s.detectFarts || last.fartCount > 0)
+                      if (s.detectFarts)
                         Text('💨 ${fartsLabel(last.fartCount)}',
                             style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: C.gas))
                       else
@@ -380,7 +380,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                             style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: C.text)),
                       Text(
                           [
-                            if (s.detectFarts || last.fartCount > 0) '${durHM(last.durationMin)} snu',
+                            if (s.detectFarts) '${durHM(last.durationMin)} snu',
                             'chrapanie ${durHM(last.snoreMin)}',
                             if (last.apneaIndex >= 5) '🫁 ${last.apneaIndex.toStringAsFixed(1)}/h',
                             if (last.breathRate != null) 'oddech ${last.breathRate!.round()}/min',

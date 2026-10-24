@@ -16,7 +16,7 @@ public class HealthRationaleActivity extends Activity {
         t.setPadding(pad, pad, pad, pad);
         t.setTextSize(16);
         t.setText("Nocny Licznik tylko zapisuje w Health Connect Twoje noce: początek i koniec snu oraz "
-                + "fazy snu (czuwanie, płytki, głęboki, REM), z krótką notatką o liczbie wiatrów i chrapaniu.\n\n"
+                + "fazy snu (czuwanie, płytki, głęboki, REM), z krótką notatką (np. o chrapaniu).\n\n"
                 + "Dzięki temu inne aplikacje, którym na to pozwolisz (np. Life Cycle), widzą Twój sen.\n\n"
                 + "Aplikacja nie czyta żadnych danych z Health Connect i niczego nie wysyła do internetu. "
                 + "Zapis wyłączysz w Ustawieniach aplikacji, a dostęp odbierzesz w Health Connect.");

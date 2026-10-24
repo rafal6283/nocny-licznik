@@ -19,7 +19,7 @@ final weatherFactors = <WeatherFactor>[
   WeatherFactor('press', 'Ciśnienie', '🧭', ' hPa', 'niższe', 'wyższe', (n) => n.wPress),
   WeatherFactor('trend', 'Zmiana ciśnienia (24 h)', '📉', ' hPa', 'spadek', 'wzrost', (n) => n.wPressTrend, 1),
   WeatherFactor('hum', 'Wilgotność', '💧', '%', 'suszej', 'wilgotniej', (n) => n.wHum),
-  WeatherFactor('wind', 'Wiatr', '💨', ' km/h', 'słabszy', 'silniejszy', (n) => n.wWind),
+  WeatherFactor('wind', 'Wiatr', '🌬️', ' km/h', 'słabszy', 'silniejszy', (n) => n.wWind),
   WeatherFactor('cloud', 'Zachmurzenie', '☁️', '%', 'pogodniej', 'pochmurniej', (n) => n.wCloud),
   WeatherFactor('rain', 'Opady', '🌧️', ' mm', 'sucho', 'deszcz', (n) => n.wRain, 1),
   WeatherFactor('moon', 'Księżyc (oświetlenie)', '🌕', '%', 'bliżej nowiu', 'bliżej pełni',

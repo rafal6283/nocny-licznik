@@ -279,7 +279,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
               title: const Text('Liczenie wiatrów 💨'),
               subtitle: const Text('Rozpoznawanie i licznik puszczanych wiatrów (domyślnie wyłączone)'),
               value: s.detectFarts,
-              onChanged: (v) => s.detectFarts = v,
+              onChanged: (v) async {
+                s.detectFarts = v;
+                // noce w Health Connect mają notatkę z liczbą wiatrów — przepisz je bez/z nią
+                if (s.healthConnect) await HealthSync.pushAll();
+              },
             ),
             if (s.detectFarts)
               ListTile(
@@ -490,6 +494,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 onChanged: _setWatchData,
               ),
             ],
+            if (s.detectFarts)
             ListTile(
               leading: const Icon(Icons.ios_share),
               title: const Text('Eksport wiatrów do Kreski'),

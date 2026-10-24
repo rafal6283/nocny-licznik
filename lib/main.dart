@@ -117,7 +117,7 @@ class BootScreen extends StatelessWidget {
           padding: const EdgeInsets.all(20),
           child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
             const SizedBox(height: 40),
-            const Center(child: Text('💨', style: TextStyle(fontSize: 56))),
+            const Center(child: Text('🌙', style: TextStyle(fontSize: 56))),
             const SizedBox(height: 12),
             Center(child: Text('Nocny Licznik · $step', style: const TextStyle(color: C.muted))),
             const SizedBox(height: 12),

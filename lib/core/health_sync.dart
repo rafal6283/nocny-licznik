@@ -36,7 +36,7 @@ class HealthSync {
       }
     }
     final notes = [
-      'Wiatry: ${n.fartCount}',
+      if (Settings.instance.detectFarts) 'Wiatry: ${n.fartCount}',
       if (n.snoreMin > 0) 'chrapanie: ${n.snoreMin} min',
       if (n.score > 0) 'ocena: ${n.score}',
       if (n.tags.isNotEmpty) n.tags.map((t) => '#$t').join(' '),
