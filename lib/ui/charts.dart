@@ -2,10 +2,12 @@ import 'dart:math';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../core/fmt.dart';
 import '../core/models.dart';
 import '../engine/sleep_analysis.dart';
+import 'chart_fx.dart';
 import 'theme.dart';
 
 const _axis = TextStyle(fontSize: 10, color: C.muted);
@@ -85,9 +87,13 @@ class SleepWaveGraph extends StatefulWidget {
   State<SleepWaveGraph> createState() => _SleepWaveGraphState();
 }
 
-class _SleepWaveGraphState extends State<SleepWaveGraph> {
+class _SleepWaveGraphState extends State<SleepWaveGraph> with SingleTickerProviderStateMixin {
   double? cursor; // 0..1
+  int? _lastMinute;
   late List<double> depth;
+  // Fala "rysuje się" od zaśnięcia do pobudki, zdarzenia wskakują, gdy dotrze do nich linia.
+  late final AnimationController _reveal =
+      AnimationController(vsync: this, duration: const Duration(milliseconds: 1400))..forward();
 
   @override
   void initState() {
@@ -98,13 +104,34 @@ class _SleepWaveGraphState extends State<SleepWaveGraph> {
   @override
   void didUpdateWidget(covariant SleepWaveGraph old) {
     super.didUpdateWidget(old);
-    if (old.minutes != widget.minutes) depth = SleepAnalysis.depthCurve(widget.minutes);
+    if (old.minutes != widget.minutes) {
+      depth = SleepAnalysis.depthCurve(widget.minutes);
+      _reveal.forward(from: 0);
+    }
+  }
+
+  @override
+  void dispose() {
+    _reveal.dispose();
+    super.dispose();
   }
 
   void _set(Offset local, double width) {
     const left = _WavePainter.left;
-    setState(() => cursor = ((local.dx - left) / (width - left - 4)).clamp(0.0, 1.0).toDouble());
+    final c = ((local.dx - left) / (width - left - 4)).clamp(0.0, 1.0).toDouble();
+    final minute = (c * (widget.minutes.length - 1)).round();
+    if (minute != _lastMinute) {
+      _lastMinute = minute;
+      // lekki "klik" co 5 minut, żeby nie brzęczało przy każdym pikselu
+      if (minute % 5 == 0) HapticFeedback.selectionClick();
+    }
+    setState(() => cursor = c);
   }
+
+  void _clear() => setState(() {
+        cursor = null;
+        _lastMinute = null;
+      });
 
   @override
   Widget build(BuildContext context) {
@@ -124,22 +151,29 @@ class _SleepWaveGraphState extends State<SleepWaveGraph> {
         height: 18,
         child: label == null
             ? const Text('Przeciągnij palcem po wykresie', style: TextStyle(fontSize: 11, color: C.muted))
-            : Text(label, style: const TextStyle(fontSize: 12, color: C.text, fontWeight: FontWeight.w600)),
+            : Text(label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 12, color: C.text, fontWeight: FontWeight.w600)),
       ),
       const SizedBox(height: 6),
       LayoutBuilder(
         builder: (c, box) => GestureDetector(
           onHorizontalDragStart: (d) => _set(d.localPosition, box.maxWidth),
           onHorizontalDragUpdate: (d) => _set(d.localPosition, box.maxWidth),
-          onHorizontalDragEnd: (_) => setState(() => cursor = null),
+          onHorizontalDragEnd: (_) => _clear(),
           onTapDown: (d) => _set(d.localPosition, box.maxWidth),
-          onTapUp: (_) => setState(() => cursor = null),
+          onTapUp: (_) => _clear(),
+          onTapCancel: _clear,
           child: SizedBox(
             height: 240,
             width: box.maxWidth,
-            child: CustomPaint(
-              painter: _WavePainter(depth, widget.minutes, widget.events, widget.start, widget.end, cursor,
-                  widget.showFarts),
+            child: AnimatedBuilder(
+              animation: _reveal,
+              builder: (context, _) => CustomPaint(
+                painter: _WavePainter(depth, widget.minutes, widget.events, widget.start, widget.end, cursor,
+                    widget.showFarts, Curves.easeInOutCubic.transform(_reveal.value)),
+              ),
             ),
           ),
         ),
@@ -156,7 +190,8 @@ class _WavePainter extends CustomPainter {
   final DateTime start, end;
   final double? cursor;
   final bool showFarts;
-  _WavePainter(this.depth, this.ms, this.evs, this.start, this.end, this.cursor, this.showFarts);
+  final double reveal;
+  _WavePainter(this.depth, this.ms, this.evs, this.start, this.end, this.cursor, this.showFarts, this.reveal);
 
   @override
   void paint(Canvas c, Size size) {
@@ -175,6 +210,11 @@ class _WavePainter extends CustomPainter {
       _dashed(c, Offset(r.left, y), Offset(r.right, y), guide);
       _text(c, name, Offset(0, y - 6));
     }
+
+    // Wszystko co zależy od czasu odsłaniamy od lewej (animacja wejścia).
+    final revealX = r.left + r.width * reveal;
+    c.save();
+    c.clipRect(Rect.fromLTRB(0, 0, revealX + 3, size.height));
 
     // Fala
     final d = _downsample(depth, 160);
@@ -247,6 +287,16 @@ class _WavePainter extends CustomPainter {
       }
     }
 
+    c.restore();
+
+    // "Głowica" rysująca falę
+    if (reveal > 0 && reveal < 1 && d.isNotEmpty) {
+      final i = (reveal * (d.length - 1)).round();
+      final head = Offset(revealX, r.top + r.height * d[i]);
+      c.drawCircle(head, 9, Paint()..color = const Color(0xFF9FE7FF).withValues(alpha: 0.25));
+      c.drawCircle(head, 4, Paint()..color = Colors.white);
+    }
+
     // Oś czasu: start i koniec pogrubione, pełne godziny pomiędzy
     final axisY = lanesTop + lanes.length * (laneH + 4) + 2;
     const bold = TextStyle(fontSize: 11, color: C.text, fontWeight: FontWeight.w700);
@@ -274,31 +324,47 @@ class _WavePainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _WavePainter old) => old.cursor != cursor || old.depth != depth;
+  bool shouldRepaint(covariant _WavePainter old) =>
+      old.cursor != cursor || old.depth != depth || old.reveal != reveal;
 }
 
 /// Klasyczny hipnogram (schodki faz) — widok alternatywny.
+/// Odsłania się od lewej; dotknięcie lub przeciągnięcie pokazuje godzinę i fazę.
 class Hypnogram extends StatelessWidget {
   final List<MinuteSample> minutes;
   final double height;
   const Hypnogram({super.key, required this.minutes, this.height = 150});
+
+  static const _left = 58.0;
 
   @override
   Widget build(BuildContext context) {
     if (minutes.length < 2) {
       return const SizedBox(height: 60, child: Center(child: Text('Za mało danych', style: _axis)));
     }
-    return SizedBox(height: height, child: CustomPaint(painter: _HypnoPainter(minutes), size: Size.infinite));
+    final n = minutes.length;
+    return InteractiveChart(
+      height: height,
+      dataKey: Object.hash(n, minutes.first.ts, minutes.last.ts),
+      count: n,
+      duration: const Duration(milliseconds: 1100),
+      indexAt: (p, size) =>
+          p.dx < _left - 8 ? null : ((p.dx - _left) / (size.width - _left) * n).floor().clamp(0, n - 1).toInt(),
+      painter: (t, sel, selA) => _HypnoPainter(minutes, t, sel, selA),
+    );
   }
 }
 
 class _HypnoPainter extends CustomPainter {
   final List<MinuteSample> ms;
-  _HypnoPainter(this.ms);
+  final double t;
+  final int? sel;
+  final double selA;
+  _HypnoPainter(this.ms, this.t, this.sel, this.selA);
 
   @override
   void paint(Canvas c, Size size) {
-    const left = 58.0;
+    const left = Hypnogram._left;
     final r = Rect.fromLTWH(left, 0, size.width - left, size.height - 18);
     final rowH = r.height / 4;
     for (final s in Stage.values) {
@@ -307,6 +373,8 @@ class _HypnoPainter extends CustomPainter {
     }
     final n = ms.length;
     final w = r.width / n;
+    c.save();
+    c.clipRect(Rect.fromLTRB(r.left, 0, r.left + r.width * Curves.easeInOutCubic.transform(t), size.height));
     var i = 0;
     while (i < n) {
       var j = i;
@@ -315,18 +383,26 @@ class _HypnoPainter extends CustomPainter {
       }
       final s = ms[i].stage;
       final y = r.top + rowH * s.index + rowH * 0.18;
+      final dim = sel != null && !(sel! >= i && sel! < j);
       c.drawRRect(
         RRect.fromRectAndRadius(Rect.fromLTWH(r.left + i * w, y, (j - i) * w, rowH * 0.64), const Radius.circular(5)),
-        Paint()..color = C.stage(s),
+        Paint()..color = C.stage(s).withValues(alpha: dim ? 1 - 0.5 * selA : 1),
       );
       i = j;
     }
+    c.restore();
     _text(c, hhmm(ms.first.ts.subtract(const Duration(minutes: 1))), Offset(r.left, r.bottom + 4));
     _text(c, hhmm(ms.last.ts), Offset(r.right, r.bottom + 4), right: true);
+    if (sel != null && sel! < n) {
+      final m = ms[sel!];
+      final x = r.left + (sel! + 0.5) * w;
+      paintTip(c, size, '${hhmm(m.ts)} · ${m.stage.label}', x, r.top + rowH * m.stage.index + rowH * 0.18, selA,
+          guideTop: r.top, guideBottom: r.bottom);
+    }
   }
 
   @override
-  bool shouldRepaint(covariant _HypnoPainter old) => old.ms != ms;
+  bool shouldRepaint(covariant _HypnoPainter old) => true;
 }
 
 // =========================================================================
@@ -334,6 +410,8 @@ class _HypnoPainter extends CustomPainter {
 // =========================================================================
 
 /// Gładki wykres liniowy z gradientowym wypełnieniem i linią średniej.
+/// Linia rysuje się od lewej, wypełnienie wyłania się pod nią; dotknięcie lub przeciągnięcie
+/// palcem pokazuje wartość najbliższego punktu.
 class LineSeriesChart extends StatelessWidget {
   final List<double?> values;
   final List<String> labels;
@@ -345,6 +423,9 @@ class LineSeriesChart extends StatelessWidget {
   final bool showAverage;
   final String Function(double)? fmt;
   final bool zeroBased;
+
+  /// false = bez animacji wejścia (np. dane na żywo).
+  final bool animate;
   const LineSeriesChart({
     super.key,
     required this.values,
@@ -357,14 +438,34 @@ class LineSeriesChart extends StatelessWidget {
     this.showAverage = true,
     this.fmt,
     this.zeroBased = true,
+    this.animate = true,
   });
 
   @override
-  Widget build(BuildContext context) => SizedBox(
+  Widget build(BuildContext context) {
+    final n = values.length;
+    final left = fmt != null ? 44.0 : 32.0;
+    return InteractiveChart(
       height: height,
-      child: CustomPaint(
-          painter: _LinePainter(values, labels, color, unit, logScale, goal, showAverage, fmt, zeroBased),
-          size: Size.infinite));
+      dataKey: Object.hashAll(values),
+      count: n,
+      animate: animate,
+      duration: const Duration(milliseconds: 1000),
+      indexAt: (p, size) {
+        if (n == 0) return null;
+        final w = size.width - left - 6;
+        final raw = n == 1 ? 0 : ((p.dx - left) / w * (n - 1)).round().clamp(0, n - 1).toInt();
+        // najbliższy punkt z wartością
+        for (var d = 0; d < n; d++) {
+          if (raw - d >= 0 && values[raw - d] != null) return raw - d;
+          if (raw + d < n && values[raw + d] != null) return raw + d;
+        }
+        return null;
+      },
+      painter: (t, sel, selA) =>
+          _LinePainter(values, labels, color, unit, logScale, goal, showAverage, fmt, zeroBased, t, sel, selA),
+    );
+  }
 }
 
 class _LinePainter extends CustomPainter {
@@ -377,8 +478,11 @@ class _LinePainter extends CustomPainter {
   final bool showAvg;
   final String Function(double)? customFmt;
   final bool zeroBased;
+  final double t;
+  final int? sel;
+  final double selA;
   _LinePainter(this.v, this.labels, this.color, this.unit, this.logScale, this.goal, this.showAvg, this.customFmt,
-      this.zeroBased);
+      this.zeroBased, this.t, this.sel, this.selA);
 
   /// Skala logarytmiczna przydaje się dla luksów (0,1 … 500 lx).
   double _t(double x) => logScale ? (x <= 0 ? 0 : log(x + 1) / ln10) : x;
@@ -440,6 +544,11 @@ class _LinePainter extends CustomPainter {
     }
     if (cur.isNotEmpty) segments.add(cur);
 
+    // odsłanianie od lewej
+    final reveal = Curves.easeInOutCubic.transform(t);
+    final revealX = r.left + r.width * reveal;
+    c.save();
+    c.clipRect(Rect.fromLTRB(0, 0, n == 1 ? size.width : revealX + 4, size.height));
     for (final seg in segments) {
       final path = _smoothPath(seg);
       if (seg.length > 1) {
@@ -451,7 +560,7 @@ class _LinePainter extends CustomPainter {
             area,
             Paint()
               ..shader = ui.Gradient.linear(r.topCenter, r.bottomCenter,
-                  [color.withValues(alpha: 0.38), color.withValues(alpha: 0.0)]));
+                  [color.withValues(alpha: 0.38 * reveal), color.withValues(alpha: 0.0)]));
       }
       c.drawPath(
           path,
@@ -462,10 +571,14 @@ class _LinePainter extends CustomPainter {
             ..strokeCap = StrokeCap.round);
       if (n <= 31) {
         for (final p in seg) {
-          c.drawCircle(p, 3.2, Paint()..color = C.bg);
+          // kropka "wskakuje", gdy dotrze do niej linia
+          final k = ((revealX - p.dx) / 24).clamp(0.0, 1.0);
+          if (k <= 0) continue;
+          final rad = 3.2 * Curves.easeOutBack.transform(k);
+          c.drawCircle(p, rad, Paint()..color = C.bg);
           c.drawCircle(
               p,
-              3.2,
+              rad,
               Paint()
                 ..color = color
                 ..style = PaintingStyle.stroke
@@ -473,6 +586,7 @@ class _LinePainter extends CustomPainter {
         }
       }
     }
+    c.restore();
 
     if (goal != null) {
       final y = yOf(goal!);
@@ -489,7 +603,7 @@ class _LinePainter extends CustomPainter {
             ..color = C.text.withValues(alpha: 0.35)
             ..strokeWidth = 1);
       _text(c, 'śr. ${_fmt(avg)}${customFmt != null ? '' : unit}', Offset(r.right - 2, y - 14),
-          right: true, style: const TextStyle(fontSize: 10, color: C.text));
+          right: true, style: TextStyle(fontSize: 10, color: C.text.withValues(alpha: reveal)));
     }
 
     if (labels.isNotEmpty) {
@@ -498,6 +612,25 @@ class _LinePainter extends CustomPainter {
         _text(c, labels[i], Offset(xOf(i), r.bottom + 6), center: true);
       }
     }
+
+    // wybrany punkt
+    final s = sel;
+    if (s != null && s < n && v[s] != null && selA > 0) {
+      final p = Offset(xOf(s), yOf(v[s]!));
+      c.drawCircle(p, 9 * selA, Paint()..color = color.withValues(alpha: 0.25 * selA));
+      c.drawCircle(p, 4.5, Paint()..color = C.bg.withValues(alpha: selA));
+      c.drawCircle(
+          p,
+          4.5,
+          Paint()
+            ..color = color.withValues(alpha: selA)
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 2.4);
+      final name = s < labels.length ? '${labels[s]} · ' : '';
+      final val = customFmt != null ? customFmt!(v[s]!) : '${_fmt(v[s]!)}$unit';
+      paintTip(c, size, '$name$val', p.dx, p.dy - 6, selA,
+          guideTop: r.top, guideBottom: r.bottom, guide: C.text.withValues(alpha: 0.35));
+    }
   }
 
   @override
@@ -505,6 +638,7 @@ class _LinePainter extends CustomPainter {
 }
 
 /// Zaokrąglone słupki z gradientem i przerywaną linią średniej.
+/// Słupki wyrastają kaskadą; dotknięcie lub przeciągnięcie palcem pokazuje wartość.
 class BarSeriesChart extends StatelessWidget {
   final List<double> values;
   final List<String> labels;
@@ -525,9 +659,16 @@ class BarSeriesChart extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) => SizedBox(
+  Widget build(BuildContext context) {
+    final n = values.length;
+    return InteractiveChart(
       height: height,
-      child: CustomPaint(painter: _BarPainter(values, labels, color, highlight, showAverage, fmt), size: Size.infinite));
+      dataKey: Object.hashAll(values),
+      count: n,
+      indexAt: (p, size) => n == 0 ? null : ((p.dx - 6) / ((size.width - 12) / n)).floor().clamp(0, n - 1).toInt(),
+      painter: (t, sel, selA) => _BarPainter(values, labels, color, highlight, showAverage, fmt, t, sel, selA),
+    );
+  }
 }
 
 class _BarPainter extends CustomPainter {
@@ -537,7 +678,10 @@ class _BarPainter extends CustomPainter {
   final int? hl;
   final bool showAvg;
   final String Function(double)? customFmt;
-  _BarPainter(this.v, this.labels, this.color, this.hl, this.showAvg, this.customFmt);
+  final double t;
+  final int? sel;
+  final double selA;
+  _BarPainter(this.v, this.labels, this.color, this.hl, this.showAvg, this.customFmt, this.t, this.sel, this.selA);
 
   String _fmt(double x) => customFmt != null
       ? customFmt!(x)
@@ -565,20 +709,30 @@ class _BarPainter extends CustomPainter {
           Paint()..color = C.surface2.withValues(alpha: 0.55));
     }
     for (var i = 0; i < n; i++) {
-      final h = max(v[i] > 0 ? bw : 0.0, r.height * v[i] / hi);
+      final g = stagger(t, i, n);
+      final full = max(v[i] > 0 ? bw : 0.0, r.height * v[i] / hi);
+      final h = full * g;
+      if (h <= 0) continue;
       final x = r.left + slot * i + (slot - bw) / 2;
       final rect = Rect.fromLTWH(x, r.bottom - h, bw, h);
-      final dim = hl != null && hl != i;
+      // wybór dotknięciem ma pierwszeństwo przed stałym wyróżnieniem
+      final focus = sel != null && selA > 0 ? sel : hl;
+      final dimBase = hl != null && hl != i ? 1.0 : 0.0;
+      final dimSel = sel != null && sel != i ? 1.0 : 0.0;
+      final dimK = focus == sel ? dimBase + (dimSel - dimBase) * selA : dimBase;
+      final rad = Radius.circular(min(bw / 2, h / 2));
       c.drawRRect(
-          RRect.fromRectAndRadius(rect, radius),
+          RRect.fromRectAndRadius(rect, rad),
           Paint()
             ..shader = ui.Gradient.linear(rect.topCenter, rect.bottomCenter, [
-              color.withValues(alpha: dim ? 0.45 : 1.0),
-              Color.lerp(color, const Color(0xFF4F6BFF), 0.55)!.withValues(alpha: dim ? 0.35 : 0.85),
+              color.withValues(alpha: 1.0 - 0.55 * dimK),
+              Color.lerp(color, const Color(0xFF4F6BFF), 0.55)!.withValues(alpha: 0.85 - 0.5 * dimK),
             ]));
       if (n <= 14 && v[i] > 0) {
+        final a = (g * (sel == i ? 1 - selA : 1)).clamp(0.0, 1.0);
         _text(c, _fmt(v[i]), Offset(x + bw / 2, r.bottom - h - 14),
-            center: true, style: const TextStyle(fontSize: 10, color: C.text, fontWeight: FontWeight.w600));
+            center: true,
+            style: TextStyle(fontSize: 10, color: C.text.withValues(alpha: a), fontWeight: FontWeight.w600));
       }
     }
     if (showAvg && n > 1) {
@@ -589,13 +743,19 @@ class _BarPainter extends CustomPainter {
             ..color = C.text.withValues(alpha: 0.4)
             ..strokeWidth = 1);
       _text(c, 'śr. ${_fmt(avg)}', Offset(r.right, y - 14),
-          right: true, style: const TextStyle(fontSize: 10, color: C.text));
+          right: true, style: TextStyle(fontSize: 10, color: C.text.withValues(alpha: t)));
     }
     if (labels.isNotEmpty) {
       final every = max(1, (labels.length / 8).ceil());
       for (var i = 0; i < labels.length && i < n; i += every) {
         _text(c, labels[i], Offset(r.left + slot * i + slot / 2, r.bottom + 6), center: true);
       }
+    }
+    final s = sel;
+    if (s != null && s < n && selA > 0) {
+      final h = max(v[s] > 0 ? bw : 0.0, r.height * v[s] / hi) * stagger(t, s, n);
+      final name = s < labels.length ? '${labels[s]} · ' : '';
+      paintTip(c, size, '$name${_fmt(v[s])}', r.left + slot * s + slot / 2, r.bottom - h, selA);
     }
   }
 
@@ -615,17 +775,23 @@ class ScoreRing extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: size,
-      height: size,
-      child: CustomPaint(
-        painter: _RingPainter(score / 100),
-        child: Center(
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            Text('$score%',
-                style: TextStyle(fontSize: size * 0.27, fontWeight: FontWeight.w700, color: C.text, height: 1.05)),
-            Text('jakość', style: TextStyle(fontSize: size * 0.11, color: C.muted)),
-          ]),
+    // Pierścień zapełnia się, a liczba odlicza w górę do wyniku.
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0, end: score / 100),
+      duration: const Duration(milliseconds: 1300),
+      curve: Curves.easeOutCubic,
+      builder: (context, f, _) => SizedBox(
+        width: size,
+        height: size,
+        child: CustomPaint(
+          painter: _RingPainter(f),
+          child: Center(
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              Text('${(f * 100).round()}%',
+                  style: TextStyle(fontSize: size * 0.27, fontWeight: FontWeight.w700, color: C.text, height: 1.05)),
+              Text('jakość', style: TextStyle(fontSize: size * 0.11, color: C.muted)),
+            ]),
+          ),
         ),
       ),
     );
@@ -690,14 +856,24 @@ class StageBar extends StatelessWidget {
     final total = parts.fold<int>(0, (a, b) => a + b.$2);
     if (total == 0) return const SizedBox();
     return Column(children: [
-      ClipRRect(
-        borderRadius: BorderRadius.circular(8),
-        child: SizedBox(
-          height: 14,
-          child: Row(children: [
-            for (final p in parts)
-              if (p.$2 > 0) Expanded(flex: p.$2, child: Container(color: C.stage(p.$1))),
-          ]),
+      // pasek rozsuwa się od lewej
+      Align(
+        alignment: Alignment.centerLeft,
+        child: TweenAnimationBuilder<double>(
+          tween: Tween(begin: 0, end: 1),
+          duration: const Duration(milliseconds: 900),
+          curve: Curves.easeOutCubic,
+          builder: (context, t, child) => ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: Align(alignment: Alignment.centerLeft, widthFactor: max(0.001, t), child: child),
+          ),
+          child: SizedBox(
+            height: 14,
+            child: Row(children: [
+              for (final p in parts)
+                if (p.$2 > 0) Expanded(flex: p.$2, child: Container(color: C.stage(p.$1))),
+            ]),
+          ),
         ),
       ),
       const SizedBox(height: 8),

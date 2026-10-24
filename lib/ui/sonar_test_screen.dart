@@ -164,7 +164,7 @@ class _SonarTestScreenState extends State<SonarTestScreen> {
                         style: const TextStyle(color: C.muted)),
                   ),
                 )
-              : LineSeriesChart(values: wave, color: C.light, height: 140, showAverage: false, zeroBased: false),
+              : LineSeriesChart(values: wave, color: C.light, height: 140, showAverage: false, zeroBased: false, animate: false),
         ),
         const SizedBox(height: 12),
         Section(
@@ -173,7 +173,8 @@ class _SonarTestScreenState extends State<SonarTestScreen> {
               values: ampHist.isEmpty ? const [] : List<double>.from(ampHist),
               color: C.gas,
               height: 110,
-              showAverage: false),
+              showAverage: false,
+              animate: false),
         ),
         const SizedBox(height: 12),
         Section(
