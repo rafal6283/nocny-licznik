@@ -141,6 +141,10 @@ class Settings extends ChangeNotifier {
   bool get healthConnect => _b('healthConnect', false);
   set healthConnect(bool v) => _set('healthConnect', v);
 
+  /// Odczyt tętna, SpO₂ i faz snu z zegarka przez Health Connect (np. Huawei przez Health Sync).
+  bool get watchData => _b('watchData', false);
+  set watchData(bool v) => _set('watchData', v);
+
   bool get keepScreenOn => _b('keepScreenOn', false);
   set keepScreenOn(bool v) => _set('keepScreenOn', v);
 

@@ -8,8 +8,14 @@ import android.util.Log
 import androidx.health.connect.client.HealthConnectClient
 import androidx.health.connect.client.PermissionController
 import androidx.health.connect.client.permission.HealthPermission
+import androidx.health.connect.client.records.HeartRateRecord
+import androidx.health.connect.client.records.OxygenSaturationRecord
+import androidx.health.connect.client.records.Record
 import androidx.health.connect.client.records.SleepSessionRecord
 import androidx.health.connect.client.records.metadata.Metadata
+import androidx.health.connect.client.request.ReadRecordsRequest
+import androidx.health.connect.client.time.TimeRangeFilter
+import kotlin.reflect.KClass
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 import io.flutter.plugin.common.PluginRegistry
@@ -32,6 +38,13 @@ class HealthSync(private val ctx: Context) : PluginRegistry.ActivityResultListen
         private const val REQ = 4711
         private const val PROVIDER = "com.google.android.apps.healthdata"
         val PERMS = setOf(HealthPermission.getWritePermission(SleepSessionRecord::class))
+
+        /** Odczyt danych z zegarka (np. Huawei przez Health Sync): tętno, SpO₂, sen z fazami. */
+        val READ_PERMS = setOf(
+            HealthPermission.getReadPermission(HeartRateRecord::class),
+            HealthPermission.getReadPermission(OxygenSaturationRecord::class),
+            HealthPermission.getReadPermission(SleepSessionRecord::class),
+        )
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
@@ -42,7 +55,14 @@ class HealthSync(private val ctx: Context) : PluginRegistry.ActivityResultListen
         when (call.method) {
             "hcStatus" -> result.success(status())
             "hcHasPermission" -> scope.launch { result.success(granted()) }
-            "hcRequestPermission" -> request(activity, result)
+            "hcRequestPermission" -> request(activity, result, PERMS)
+            "hcHasReadPermission" -> scope.launch { result.success(granted(READ_PERMS)) }
+            "hcRequestReadPermission" -> request(activity, result, READ_PERMS)
+            "hcReadNight" -> {
+                val from = (call.argument<Number>("start"))?.toLong() ?: 0L
+                val to = (call.argument<Number>("end"))?.toLong() ?: 0L
+                scope.launch { result.success(readNight(from, to)) }
+            }
             "hcWriteSleep" -> {
                 val nights = call.argument<List<Map<String, Any?>>>("nights") ?: emptyList()
                 scope.launch { result.success(write(nights)) }
@@ -58,15 +78,17 @@ class HealthSync(private val ctx: Context) : PluginRegistry.ActivityResultListen
         else -> "unavailable"
     }
 
-    private suspend fun granted(): Boolean = try {
+    private suspend fun granted(perms: Set<String> = PERMS): Boolean = try {
         status() == "available" &&
-            HealthConnectClient.getOrCreate(ctx).permissionController.getGrantedPermissions().containsAll(PERMS)
+            HealthConnectClient.getOrCreate(ctx).permissionController.getGrantedPermissions().containsAll(perms)
     } catch (e: Exception) {
         Log.w(TAG, "Sprawdzenie uprawnień", e)
         false
     }
 
-    private fun request(activity: Activity?, result: MethodChannel.Result) {
+    private var pendingPerms: Set<String> = PERMS
+
+    private fun request(activity: Activity?, result: MethodChannel.Result, perms: Set<String>) {
         when (status()) {
             "update" -> {
                 // Android 9–13: aplikacja Health Connect do zainstalowania/aktualizacji ze Sklepu Play.
@@ -86,7 +108,7 @@ class HealthSync(private val ctx: Context) : PluginRegistry.ActivityResultListen
             }
         }
         scope.launch {
-            if (granted()) {
+            if (granted(perms)) {
                 result.success(true)
                 return@launch
             }
@@ -96,7 +118,8 @@ class HealthSync(private val ctx: Context) : PluginRegistry.ActivityResultListen
             }
             pending?.success(false)
             pending = result
-            val intent = PermissionController.createRequestPermissionResultContract().createIntent(activity, PERMS)
+            pendingPerms = perms
+            val intent = PermissionController.createRequestPermissionResultContract().createIntent(activity, perms)
             activity.startActivityForResult(intent, REQ)
         }
     }
@@ -105,7 +128,8 @@ class HealthSync(private val ctx: Context) : PluginRegistry.ActivityResultListen
         if (requestCode != REQ) return false
         val r = pending ?: return true
         pending = null
-        scope.launch { r.success(granted()) }
+        val perms = pendingPerms
+        scope.launch { r.success(granted(perms)) }
         return true
     }
 
@@ -158,6 +182,86 @@ class HealthSync(private val ctx: Context) : PluginRegistry.ActivityResultListen
         } catch (e: Exception) {
             Log.w(TAG, "Zapis snu do Health Connect", e)
             -1
+        }
+    }
+
+    /** Wszystkie strony rekordów danego typu z przedziału czasu. */
+    private suspend fun <T : Record> readAll(client: HealthConnectClient, type: KClass<T>, from: Instant, to: Instant): List<T> {
+        val out = ArrayList<T>()
+        var token: String? = null
+        do {
+            val resp = client.readRecords(
+                ReadRecordsRequest(type, TimeRangeFilter.between(from, to), pageSize = 1000, pageToken = token)
+            )
+            out += resp.records
+            token = resp.pageToken
+        } while (token != null && out.size < 20_000)
+        return out
+    }
+
+    private fun stageName(t: Int): String = when (t) {
+        1, 3, 7 -> "wake" // czuwanie, poza łóżkiem, czuwanie w łóżku
+        SleepSessionRecord.STAGE_TYPE_LIGHT -> "light"
+        SleepSessionRecord.STAGE_TYPE_DEEP -> "deep"
+        SleepSessionRecord.STAGE_TYPE_REM -> "rem"
+        else -> "sleep"
+    }
+
+    /**
+     * Dane z zegarka dla nocy [from, to] (ms). Pomija rekordy zapisane przez tę aplikację.
+     * Zwraca: {hr: [[ms, bpm]], spo2: [[ms, %]], stages: [[start, end, stage]], sources: [pakiety]}
+     * albo null przy braku zgody / błędzie.
+     */
+    private suspend fun readNight(fromMs: Long, toMs: Long): Map<String, Any?>? {
+        if (toMs <= fromMs || !granted(READ_PERMS)) return null
+        val from = Instant.ofEpochMilli(fromMs)
+        val to = Instant.ofEpochMilli(toMs)
+        val me = ctx.packageName
+        return try {
+            val client = HealthConnectClient.getOrCreate(ctx)
+            val sources = LinkedHashSet<String>()
+
+            val hr = ArrayList<List<Number>>()
+            for (r in readAll(client, HeartRateRecord::class, from, to)) {
+                val pkg = r.metadata.dataOrigin.packageName
+                if (pkg == me) continue
+                sources += pkg
+                for (smp in r.samples) {
+                    val t = smp.time.toEpochMilli()
+                    if (t in fromMs..toMs) hr.add(listOf(t, smp.beatsPerMinute))
+                }
+            }
+            hr.sortBy { it[0].toLong() }
+
+            val spo2 = ArrayList<List<Number>>()
+            for (r in readAll(client, OxygenSaturationRecord::class, from, to)) {
+                val pkg = r.metadata.dataOrigin.packageName
+                if (pkg == me) continue
+                sources += pkg
+                spo2.add(listOf(r.time.toEpochMilli(), r.percentage.value))
+            }
+            spo2.sortBy { it[0].toLong() }
+
+            // Sesje snu nachodzące na noc (mogą zacząć się przed startem nagrania)
+            val stages = ArrayList<List<Any>>()
+            val pad = java.time.Duration.ofHours(3)
+            for (r in readAll(client, SleepSessionRecord::class, from.minus(pad), to.plus(pad))) {
+                val pkg = r.metadata.dataOrigin.packageName
+                if (pkg == me) continue
+                if (r.endTime.toEpochMilli() <= fromMs || r.startTime.toEpochMilli() >= toMs) continue
+                sources += pkg
+                if (r.stages.isEmpty()) {
+                    stages.add(listOf(r.startTime.toEpochMilli(), r.endTime.toEpochMilli(), "sleep"))
+                } else {
+                    for (st in r.stages) stages.add(listOf(st.startTime.toEpochMilli(), st.endTime.toEpochMilli(), stageName(st.stage)))
+                }
+            }
+            stages.sortBy { (it[0] as Long) }
+
+            mapOf("hr" to hr, "spo2" to spo2, "stages" to stages, "sources" to sources.toList())
+        } catch (e: Exception) {
+            Log.w(TAG, "Odczyt z Health Connect", e)
+            null
         }
     }
 }

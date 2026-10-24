@@ -144,6 +144,34 @@ class BakometrNative {
     }
   }
 
+  /// Zgoda na odczyt danych z zegarka (tętno, SpO₂, sen). true = jest.
+  static Future<bool> healthConnectHasReadPermission() async {
+    try {
+      return await _ch.invokeMethod<bool>('hcHasReadPermission') ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  static Future<bool> healthConnectRequestReadPermission() async {
+    try {
+      return await _ch.invokeMethod<bool>('hcRequestReadPermission') ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Dane innych aplikacji (zegarka) z przedziału nocy:
+  /// {hr: [[ms, bpm]], spo2: [[ms, %]], stages: [[start, end, stage]], sources: [pakiety]} albo null.
+  static Future<Map<String, Object?>?> healthConnectReadNight(int startMs, int endMs) async {
+    try {
+      final r = await _ch.invokeMethod<Map<Object?, Object?>>('hcReadNight', {'start': startMs, 'end': endMs});
+      return r?.map((k, v) => MapEntry(k.toString(), v));
+    } catch (_) {
+      return null;
+    }
+  }
+
   static Future<void> _safe(Future<dynamic> Function() f) async {
     try {
       await f();

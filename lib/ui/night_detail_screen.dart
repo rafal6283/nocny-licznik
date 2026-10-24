@@ -11,6 +11,7 @@ import '../core/models.dart';
 import '../core/night_log.dart';
 import '../core/settings.dart';
 import '../core/stats_util.dart';
+import '../core/watch_data.dart';
 import '../core/weather.dart';
 import '../engine/night_engine.dart';
 import 'charts.dart';
@@ -34,6 +35,8 @@ class _NightDetailScreenState extends State<NightDetailScreen> {
   int? playingId;
   final noteCtl = TextEditingController();
   Timer? _noteDebounce;
+  WatchNight? watch;
+  bool watchLoading = false;
 
   @override
   void initState() {
@@ -63,6 +66,171 @@ class _NightDetailScreenState extends State<NightDetailScreen> {
       evs = e;
       noteCtl.text = night?.note ?? '';
     });
+    if (night != null) _loadWatch(night);
+  }
+
+  Future<void> _loadWatch(Night night) async {
+    if (!WatchNight.supported || !Settings.instance.watchData || night.end == null) return;
+    setState(() => watchLoading = true);
+    final w = await WatchNight.load(night);
+    if (!mounted) return;
+    setState(() {
+      watch = w;
+      watchLoading = false;
+    });
+  }
+
+  /// Tętno, SpO₂ i fazy snu z zegarka (Health Connect, np. Huawei przez Health Sync).
+  Widget _watchCard(Night night) {
+    final w = watch;
+    final refresh = IconButton(
+      tooltip: 'Odśwież dane z zegarka',
+      visualDensity: VisualDensity.compact,
+      icon: watchLoading
+          ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+          : const Icon(Icons.refresh, size: 20, color: C.muted),
+      onPressed: watchLoading ? null : () => _loadWatch(night),
+    );
+    if (w == null || w.isEmpty) {
+      return Section(
+        title: 'Z zegarka ⌚',
+        trailing: refresh,
+        child: Text(
+          watchLoading
+              ? 'Pobieram dane z Health Connect…'
+              : w == null
+                  ? 'Brak zgody na odczyt z Health Connect. Włącz „Dane z zegarka” w ustawieniach.'
+                  : 'Brak danych z zegarka dla tej nocy. Przy zegarku Huawei sprawdź, czy Health Sync przesyła '
+                      'tętno, SpO₂ i sen do Health Connect — dane pojawiają się zwykle kilka minut po synchronizacji.',
+          style: const TextStyle(color: C.muted, fontSize: 13),
+        ),
+      );
+    }
+    final end = night.end!;
+    const hrColor = Color(0xFFFF6B8A);
+    final hrB = WatchNight.buckets(w.hr, night.start, end, 5);
+    final spB = WatchNight.buckets(w.spo2, night.start, end, 5);
+    final labels = [
+      for (var i = 0; i < max(hrB.length, spB.length); i++) hhmm(night.start.add(Duration(minutes: 5 * i)))
+    ];
+    final hrVals = w.hr.map((e) => e.$2).toList();
+    final spVals = w.spo2.map((e) => e.$2).toList();
+    final apneas = [
+      for (final e in evs)
+        if (e.type == SoundType.apnea || e.type == SoundType.hypopnea) e.ts
+    ];
+    final around = w.hrAround(apneas);
+    String sources() => w.sources.map(WatchNight.sourceName).toSet().join(', ');
+
+    final ours = {'deep': night.deepMin, 'light': night.lightMin, 'rem': night.remMin, 'wake': night.awakeMin};
+    final theirs = w.stageMinutes();
+    Widget stageRow(String name, Map<String, int> m) {
+      final order = [('deep', Stage.deep), ('light', Stage.light), ('rem', Stage.rem), ('wake', Stage.wake)];
+      final total = m.values.fold<int>(0, (a, b) => a + b);
+      return Padding(
+        padding: const EdgeInsets.only(top: 6),
+        child: Row(children: [
+          SizedBox(width: 92, child: Text(name, style: const TextStyle(fontSize: 12, color: C.muted))),
+          Expanded(
+            child: total == 0
+                ? const Text('—', style: TextStyle(color: C.muted))
+                : TweenAnimationBuilder<double>(
+                    tween: Tween(begin: 0, end: 1),
+                    duration: const Duration(milliseconds: 900),
+                    curve: Curves.easeOutCubic,
+                    builder: (context, t, child) => Align(
+                      alignment: Alignment.centerLeft,
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(6),
+                        child: Align(alignment: Alignment.centerLeft, widthFactor: max(0.001, t), child: child),
+                      ),
+                    ),
+                    child: SizedBox(
+                      height: 12,
+                      child: Row(children: [
+                        for (final (k, st) in order)
+                          if (m[k]! > 0) Expanded(flex: m[k]!, child: Container(color: C.stage(st))),
+                      ]),
+                    ),
+                  ),
+          ),
+        ]),
+      );
+    }
+
+    String pct(Map<String, int> m, String k) {
+      final total = m.values.fold<int>(0, (a, b) => a + b);
+      return total == 0 ? '—' : '${(m[k]! * 100 / total).round()}%';
+    }
+
+    return Section(
+      title: 'Z zegarka ⌚',
+      trailing: refresh,
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        Text('Źródło: ${sources()}', style: const TextStyle(fontSize: 11, color: C.muted)),
+        if (hrVals.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          Row(children: [
+            const Text('Tętno', style: TextStyle(fontWeight: FontWeight.w700, color: C.text)),
+            const Spacer(),
+            Text(
+                'min ${hrVals.reduce(min).round()} · śr. ${(hrVals.reduce((a, b) => a + b) / hrVals.length).round()}'
+                ' · maks. ${hrVals.reduce(max).round()} bpm',
+                style: const TextStyle(fontSize: 12, color: C.muted)),
+          ]),
+          const SizedBox(height: 6),
+          LineSeriesChart(
+            values: hrB,
+            labels: labels.take(hrB.length).toList(),
+            color: hrColor,
+            zeroBased: false,
+            showAverage: true,
+            fmt: (v) => '${v.round()} bpm',
+          ),
+          if (around != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(
+                'Przy przerwach w oddechu tętno średnio ${around.$1.round()} bpm '
+                '(${around.$1 >= around.$2 ? '+' : ''}${(around.$1 - around.$2).round()} wobec średniej nocy).',
+                style: const TextStyle(fontSize: 12, color: C.text),
+              ),
+            ),
+        ],
+        if (spVals.isNotEmpty) ...[
+          const SizedBox(height: 14),
+          Row(children: [
+            const Text('Saturacja (SpO₂)', style: TextStyle(fontWeight: FontWeight.w700, color: C.text)),
+            const Spacer(),
+            Text(
+                'min ${spVals.reduce(min).toStringAsFixed(0)}% · poniżej 90%: '
+                '${(spVals.where((v) => v < 90).length * 100 / spVals.length).round()}% pomiarów',
+                style: TextStyle(fontSize: 12, color: spVals.reduce(min) < 90 ? C.danger : C.muted)),
+          ]),
+          const SizedBox(height: 6),
+          LineSeriesChart(
+            values: spB,
+            labels: labels.take(spB.length).toList(),
+            color: const Color(0xFF5EC8F2),
+            zeroBased: false,
+            goal: 90,
+            fmt: (v) => '${v.toStringAsFixed(0)}%',
+          ),
+        ],
+        if (w.stages.isNotEmpty) ...[
+          const SizedBox(height: 14),
+          const Text('Fazy snu: zegarek a Nocny Licznik', style: TextStyle(fontWeight: FontWeight.w700, color: C.text)),
+          stageRow('Nocny Licznik', ours),
+          stageRow('Zegarek', theirs),
+          const SizedBox(height: 6),
+          Text(
+            'Głęboki ${pct(ours, 'deep')} / ${pct(theirs, 'deep')} · REM ${pct(ours, 'rem')} / ${pct(theirs, 'rem')}'
+            ' · czuwanie ${pct(ours, 'wake')} / ${pct(theirs, 'wake')}',
+            style: const TextStyle(fontSize: 12, color: C.muted),
+          ),
+        ],
+      ]),
+    );
   }
 
   Future<void> _play(SoundEvent e) async {
@@ -529,6 +697,10 @@ class _NightDetailScreenState extends State<NightDetailScreen> {
           ],
           _breathingCard(night),
           _breathRateCard(),
+          if (WatchNight.supported && Settings.instance.watchData && night.end != null) ...[
+            const SizedBox(height: 12),
+            _watchCard(night),
+          ],
           const SizedBox(height: 12),
           TileGrid(columns: 3, children: [
             StatTile(label: 'Zasypianie', value: durHM(night.latencyMin)),

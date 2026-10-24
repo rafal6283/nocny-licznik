@@ -220,6 +220,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await _pushAll();
   }
 
+  Future<void> _setWatchData(bool on) async {
+    if (!on) {
+      setState(() => s.watchData = false);
+      return;
+    }
+    final status = await BakometrNative.healthConnectStatus();
+    if (status == 'unavailable') {
+      _snack('Health Connect nie jest dostępne na tym telefonie');
+      return;
+    }
+    final ok = await BakometrNative.healthConnectRequestReadPermission();
+    if (!ok) {
+      _snack(status == 'update'
+          ? 'Zainstaluj lub zaktualizuj Health Connect ze Sklepu Play i włącz ponownie'
+          : 'Bez zgody na odczyt tętna, SpO₂ i snu nie da się pobrać danych z zegarka');
+      return;
+    }
+    setState(() => s.watchData = true);
+    _snack('Gotowe. Dane z zegarka zobaczysz w szczegółach każdej nocy');
+  }
+
   Future<void> _pushAll() async {
     final n = await HealthSync.pushAll();
     _snack(n < 0 ? 'Nie udało się zapisać nocy w Health Connect' : 'Zapisano w Health Connect nocy: $n');
@@ -460,6 +481,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   subtitle: const Text('Ponowny zapis aktualizuje noce, nie tworzy duplikatów'),
                   onTap: _pushAll,
                 ),
+              SwitchListTile(
+                secondary: const Icon(Icons.watch_outlined),
+                title: const Text('Dane z zegarka'),
+                subtitle: const Text('Tętno, SpO₂ i fazy snu z Health Connect, pokazywane przy każdej nocy. '
+                    'Zegarek Huawei: zainstaluj Health Sync i włącz w nim przesyłanie do Health Connect'),
+                value: s.watchData,
+                onChanged: _setWatchData,
+              ),
             ],
             ListTile(
               leading: const Icon(Icons.ios_share),
