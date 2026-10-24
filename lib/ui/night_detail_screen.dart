@@ -168,6 +168,8 @@ class _NightDetailScreenState extends State<NightDetailScreen> {
   String _sourceNote(String? src) => switch (src) {
         'ruch' => 'Fazy z ruchu telefonu leżącego na materacu (+ chrapanie i dźwięki). Szacunek, nie badanie snu.',
         'sonar' => 'Fazy z ruchu i oddechu mierzonych sonarem (+ chrapanie). Szacunek, nie badanie snu.',
+        'ruch+sonar' => 'Fazy z ruchu telefonu na materacu połączonego z ruchem i tempem oddechu z sonaru '
+            '(+ chrapanie). Najdokładniejszy tryb — wciąż szacunek, nie badanie snu.',
         'dźwięk' => 'Telefon nie wyczuwał ruchu — fazy oszacowane z dźwięków (szelest, chrapanie). Mniej dokładne: '
             'połóż telefon na materacu albo włącz sonar.',
         'szablon' => 'Brak sygnału ruchu i dźwięków — pokazany typowy przebieg cykli snu, nie Twoje fazy. '

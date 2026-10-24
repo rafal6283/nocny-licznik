@@ -953,7 +953,7 @@ class NightEngine extends ChangeNotifier {
 
   /// Przy starcie aplikacji: domyka noce przerwane przez system (np. ubicie procesu).
   /// Wersja algorytmu faz — po zmianie przeliczamy zapisane noce.
-  static const stagingVersion = 2;
+  static const stagingVersion = 3;
 
   static Future<int> reanalyzeAll() async {
     var c = 0;

@@ -210,11 +210,27 @@ class SleepAnalysis {
     }
 
     final accel = tryValues([for (final m in ms) m.motion], 'ruch');
-    if (accel != null) return accel;
-    if (ms.any((m) => m.sonarMotion != null)) {
-      final son = tryValues([for (final m in ms) m.sonarMotion ?? 0], 'sonar');
-      if (son != null) return son;
+    final son = ms.any((m) => m.sonarMotion != null)
+        ? tryValues([for (final m in ms) m.sonarMotion ?? 0], 'sonar')
+        : null;
+    if (accel != null && son != null) {
+      // Oba źródła: każde w swojej skali (względem mediany swoich ruchów), w minucie bierzemy silniejsze.
+      // Sonar dokłada drobne ruchy, których telefon na materacu nie czuje.
+      double medOf(MovementSignal m) {
+        final e = [for (final x in m.values) if (x > m.threshold) x]..sort();
+        return e.isEmpty ? 1 : e[e.length ~/ 2];
+      }
+
+      final ma = medOf(accel), mso = medOf(son);
+      final fused = [
+        for (var i = 0; i < n; i++)
+          max(accel.values[i] > accel.threshold ? accel.values[i] / ma : 0.0,
+              son.values[i] > son.threshold ? son.values[i] / mso : 0.0)
+      ];
+      return MovementSignal(fused, 1e-9, 'ruch+sonar');
     }
+    if (accel != null) return accel;
+    if (son != null) return son;
     // Dźwięki: nagły szelest (szczyt minuty ≥12 dB nad jej średnią), mowa, kaszel.
     final snd = [
       for (final m in ms)
@@ -295,6 +311,16 @@ class SleepAnalysis {
     const pSnore = [0.02, 0.06, 0.30, 0.38];
     const pSound = [0.30, 0.06, 0.05, 0.01];
     const pIrregular = [0.50, 0.45, 0.15, 0.06];
+    // Tempo oddechu (sonar) względem mediany nocy: wolne / typowe / szybkie.
+    // Sen głęboki — wolniej i równo, REM — szybciej.
+    const pRate = [
+      [0.15, 0.40, 0.45],
+      [0.10, 0.35, 0.55],
+      [0.25, 0.50, 0.25],
+      [0.55, 0.40, 0.05],
+    ];
+    final rates = [for (final m in ms) if (m.breathRate != null) m.breathRate!]..sort();
+    final medRate = rates.length >= 30 ? rates[rates.length ~/ 2] : null;
 
     var onset0 = 0;
     var run = 0;
@@ -317,6 +343,11 @@ class SleepAnalysis {
         if (mv.source != 'dźwięk') e += log(ms[i].sounds > 0 ? pSound[k] : 1 - pSound[k]);
         final bv = ms[i].breathVar;
         if (bv != null) e += log(bv > 0.25 ? pIrregular[k] : 1 - pIrregular[k]);
+        final br = ms[i].breathRate;
+        if (br != null && medRate != null) {
+          final rel = br / medRate;
+          e += log(pRate[k][rel < 0.95 ? 0 : (rel > 1.05 ? 2 : 1)]);
+        }
         out[k] = e;
       }
       out[3] += log(0.25 + 1.5 * pow(1 - t, 2)); // głęboki: wcześnie
