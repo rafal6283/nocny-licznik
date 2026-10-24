@@ -80,6 +80,14 @@ class Night {
   double? moonPhase; // 0 = nów, 0,5 = pełnia
   String? interruptReason; // gdy noc przerwał system/awaria — opis z Androida
   String? stageSource; // skąd fazy: ruch / sonar / dźwięk / szablon
+  // Z karty SD aparatu ResMed (AirSense 10/11)
+  double? cpapOai, cpapCai, cpapHi; // bezdechy obturacyjne / centralne / spłycenia na godzinę
+  double? cpapLeak95; // l/min
+  double? cpapPress50, cpapPress95; // cmH2O
+  double? cpapRr; // oddechy/min (mediana)
+  // Z zegarka (Health Connect)
+  double? hrAvg, hrMin, spo2Min, spo2Avg;
+  double? odi; // spadki saturacji ≥3% na godzinę
   double? avgNoise; // hałas otoczenia: Leq nocy w dBFS (dB SPL = + kalibracja)
   double? maxNoise; // najgłośniejsze 0,5 s nocy w dBFS
   double? avgLux;
@@ -130,6 +138,18 @@ class Night {
     this.moonPhase,
     this.interruptReason,
     this.stageSource,
+    this.cpapOai,
+    this.cpapCai,
+    this.cpapHi,
+    this.cpapLeak95,
+    this.cpapPress50,
+    this.cpapPress95,
+    this.cpapRr,
+    this.hrAvg,
+    this.hrMin,
+    this.spo2Min,
+    this.spo2Avg,
+    this.odi,
     this.avgLux,
     this.maxLux,
   }) : tags = tags ?? [];
@@ -180,6 +200,18 @@ class Night {
         'moon_phase': moonPhase,
         'interrupt_reason': interruptReason,
         'stage_source': stageSource,
+        'cpap_oai': cpapOai,
+        'cpap_cai': cpapCai,
+        'cpap_hi': cpapHi,
+        'cpap_leak95': cpapLeak95,
+        'cpap_press50': cpapPress50,
+        'cpap_press95': cpapPress95,
+        'cpap_rr': cpapRr,
+        'hr_avg': hrAvg,
+        'hr_min': hrMin,
+        'spo2_min': spo2Min,
+        'spo2_avg': spo2Avg,
+        'odi': odi,
         'max_noise': maxNoise,
         'avg_lux': avgLux,
         'max_lux': maxLux,
@@ -231,6 +263,18 @@ class Night {
         moonPhase: (m['moon_phase'] as num?)?.toDouble(),
         interruptReason: m['interrupt_reason'] as String?,
         stageSource: m['stage_source'] as String?,
+        cpapOai: (m['cpap_oai'] as num?)?.toDouble(),
+        cpapCai: (m['cpap_cai'] as num?)?.toDouble(),
+        cpapHi: (m['cpap_hi'] as num?)?.toDouble(),
+        cpapLeak95: (m['cpap_leak95'] as num?)?.toDouble(),
+        cpapPress50: (m['cpap_press50'] as num?)?.toDouble(),
+        cpapPress95: (m['cpap_press95'] as num?)?.toDouble(),
+        cpapRr: (m['cpap_rr'] as num?)?.toDouble(),
+        hrAvg: (m['hr_avg'] as num?)?.toDouble(),
+        hrMin: (m['hr_min'] as num?)?.toDouble(),
+        spo2Min: (m['spo2_min'] as num?)?.toDouble(),
+        spo2Avg: (m['spo2_avg'] as num?)?.toDouble(),
+        odi: (m['odi'] as num?)?.toDouble(),
         maxNoise: (m['max_noise'] as num?)?.toDouble(),
         avgLux: (m['avg_lux'] as num?)?.toDouble(),
         maxLux: (m['max_lux'] as num?)?.toDouble(),
@@ -295,6 +339,7 @@ class MinuteSample {
   final double? breathRate; // sonar: oddechy/min
   final double? breathVar; // sonar: zmienność odstępów między oddechami (CV)
   final double? sonarMotion; // sonar: ruch ciała (względny)
+  final double? hr; // tętno z zegarka (średnia minuty)
   final double? lux;
   final int farts;
   final bool snore;
@@ -311,6 +356,7 @@ class MinuteSample {
     this.breathRate,
     this.breathVar,
     this.sonarMotion,
+    this.hr,
     this.lux,
     this.farts = 0,
     this.snore = false,
@@ -329,6 +375,7 @@ class MinuteSample {
         'breath_rate': breathRate,
         'breath_var': breathVar,
         'sonar_motion': sonarMotion,
+        'hr': hr,
         'lux': lux,
         'farts': farts,
         'snore': snore ? 1 : 0,
@@ -346,6 +393,7 @@ class MinuteSample {
         breathRate: (m['breath_rate'] as num?)?.toDouble(),
         breathVar: (m['breath_var'] as num?)?.toDouble(),
         sonarMotion: (m['sonar_motion'] as num?)?.toDouble(),
+        hr: (m['hr'] as num?)?.toDouble(),
         lux: (m['lux'] as num?)?.toDouble(),
         farts: (m['farts'] as int?) ?? 0,
         snore: (m['snore'] as int?) == 1,

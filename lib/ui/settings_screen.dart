@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:bakometr_native/bakometr_native.dart';
 import 'package:file_picker/file_picker.dart';
@@ -12,6 +13,7 @@ import '../core/exchange_export.dart';
 import '../core/fmt.dart';
 import '../core/health_sync.dart';
 import '../core/reminders.dart';
+import '../core/resmed_import.dart';
 import '../core/settings.dart';
 import '../core/weather.dart';
 import 'diagnostics_screen.dart';
@@ -145,6 +147,57 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _snack('Wczytano ${days.length} dni z aparatu · dopasowano do $n ${plural(n, 'nocy', 'nocy', 'nocy')}.');
     } catch (e) {
       _snack('Import nie powiódł się: $e');
+    }
+  }
+
+  bool _sdBusy = false;
+
+  /// Karta SD z ResMed AirSense 10/11: STR.edf + DATALOG (zdarzenia i przebiegi).
+  Future<void> _importResmedSd() async {
+    if (_sdBusy) return;
+    final nights = await Db.instance.nights();
+    if (nights.isEmpty) {
+      _snack('Najpierw nagraj choć jedną noc — dane z aparatu są dopisywane do nagranych nocy.');
+      return;
+    }
+    String ymd(DateTime d) =>
+        '${d.year.toString().padLeft(4, '0')}${d.month.toString().padLeft(2, '0')}${d.day.toString().padLeft(2, '0')}';
+    final first = nights.map((n) => n.start).reduce((a, b) => a.isBefore(b) ? a : b);
+    final last = nights.map((n) => n.start).reduce((a, b) => a.isAfter(b) ? a : b);
+    setState(() => _sdBusy = true);
+    try {
+      ResmedResult res;
+      if (Platform.isAndroid) {
+        final paths = await BakometrNative.pickCpapCard(
+            from: ymd(first.subtract(const Duration(days: 1))), to: ymd(last.add(const Duration(days: 1))));
+        if (paths == null) return;
+        if (paths.isEmpty) {
+          _snack('Nie znalazłem STR.edf ani folderu DATALOG. Wskaż główny folder karty SD z aparatu.');
+          return;
+        }
+        res = await ResmedImport.importPaths(paths);
+      } else {
+        final picked = await FilePicker.pickFiles(type: FileType.custom, allowedExtensions: const ['edf']);
+        if (picked.isEmpty) return;
+        final files = <(String, Uint8List)>[];
+        for (final f in picked) {
+          files.add((f.name, await f.readAsBytes()));
+        }
+        res = await ResmedImport.importFiles(files);
+      }
+      if (res.problems.isNotEmpty && res.nightsSummary == 0 && res.nightsDetail == 0) {
+        _snack(res.problems.first);
+      } else if (res.nightsSummary == 0 && res.nightsDetail == 0) {
+        _snack('Wczytano ${res.files} plików, ale żaden dzień z aparatu nie pasuje do nagranych nocy.');
+      } else {
+        _snack('Aparat: podsumowania dla ${res.nightsSummary} ${plural(res.nightsSummary, 'nocy', 'nocy', 'nocy')}, '
+            'szczegóły dla ${res.nightsDetail} · ${res.events} zdarzeń'
+            '${res.problems.isEmpty ? '' : ' · ${res.problems.length} plików pominięto'}.');
+      }
+    } catch (e) {
+      _snack('Import z karty nie powiódł się: $e');
+    } finally {
+      if (mounted) setState(() => _sdBusy = false);
     }
   }
 
@@ -424,6 +477,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
               subtitle: const Text('Domyślnie dla kolejnych nocy (zmienisz też na ekranie Noc)'),
               value: s.cpapDefault,
               onChanged: (v) => s.cpapDefault = v,
+            ),
+            ListTile(
+              leading: _sdBusy
+                  ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2))
+                  : const Icon(Icons.sd_card_outlined),
+              title: const Text('Importuj z karty SD (ResMed AirSense 10/11)'),
+              subtitle: const Text('Wyjmij kartę z aparatu, włóż do czytnika (USB-C/OTG) i wskaż jej główny folder. '
+                  'AHI z podziałem na rodzaje bezdechów, nieszczelność, ciśnienie, oddech i zdarzenia z godziną'),
+              onTap: _importResmedSd,
             ),
             ListTile(
               leading: const Icon(Icons.upload_file),

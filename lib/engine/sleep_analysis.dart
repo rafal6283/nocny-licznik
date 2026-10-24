@@ -321,6 +321,15 @@ class SleepAnalysis {
     ];
     final rates = [for (final m in ms) if (m.breathRate != null) m.breathRate!]..sort();
     final medRate = rates.length >= 30 ? rates[rates.length ~/ 2] : null;
+    // Tętno z zegarka względem mediany nocy: niższe → głęboki, wyższe → REM/czuwanie.
+    const pHr = [
+      [0.10, 0.30, 0.60],
+      [0.12, 0.38, 0.50],
+      [0.25, 0.50, 0.25],
+      [0.55, 0.38, 0.07],
+    ];
+    final hrs = [for (final m in ms) if (m.hr != null) m.hr!]..sort();
+    final medHr = hrs.length >= 60 ? hrs[hrs.length ~/ 2] : null;
 
     var onset0 = 0;
     var run = 0;
@@ -343,6 +352,11 @@ class SleepAnalysis {
         if (mv.source != 'dźwięk') e += log(ms[i].sounds > 0 ? pSound[k] : 1 - pSound[k]);
         final bv = ms[i].breathVar;
         if (bv != null) e += log(bv > 0.25 ? pIrregular[k] : 1 - pIrregular[k]);
+        final hr = ms[i].hr;
+        if (hr != null && medHr != null) {
+          final rel = hr / medHr;
+          e += log(pHr[k][rel < 0.95 ? 0 : (rel > 1.05 ? 2 : 1)]);
+        }
         final br = ms[i].breathRate;
         if (br != null && medRate != null) {
           final rel = br / medRate;

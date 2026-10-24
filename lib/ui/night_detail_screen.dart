@@ -29,6 +29,7 @@ class _NightDetailScreenState extends State<NightDetailScreen> {
   Night? n;
   List<MinuteSample> ms = [];
   List<SoundEvent> evs = [];
+  List<(DateTime, String, double?, double?)> ext = [];
   SoundType? filter = Settings.instance.detectFarts ? SoundType.fart : SoundType.snore;
   bool stepView = false;
   final player = AudioPlayer();
@@ -59,11 +60,13 @@ class _NightDetailScreenState extends State<NightDetailScreen> {
     final night = await Db.instance.night(widget.nightId);
     final m = await Db.instance.minutes(widget.nightId);
     final e = await Db.instance.events(widget.nightId);
+    final x = await Db.instance.ext(widget.nightId);
     if (!mounted) return;
     setState(() {
       n = night;
       ms = m;
       evs = e;
+      ext = x;
       noteCtl.text = night?.note ?? '';
     });
     if (night != null) _loadWatch(night);
@@ -73,6 +76,11 @@ class _NightDetailScreenState extends State<NightDetailScreen> {
     if (!WatchNight.supported || !Settings.instance.watchData || night.end == null) return;
     setState(() => watchLoading = true);
     final w = await WatchNight.load(night);
+    // Tętno i SpO₂ zapisujemy do nocy (fazy snu, statystyki) — także przy ponownym odświeżeniu.
+    if (w != null && !w.isEmpty && await WatchNight.applyToNight(night, w)) {
+      final m = await Db.instance.minutes(night.id!);
+      if (mounted) setState(() => ms = m);
+    }
     if (!mounted) return;
     setState(() {
       watch = w;
@@ -204,7 +212,8 @@ class _NightDetailScreenState extends State<NightDetailScreen> {
             const Spacer(),
             Text(
                 'min ${spVals.reduce(min).toStringAsFixed(0)}% · poniżej 90%: '
-                '${(spVals.where((v) => v < 90).length * 100 / spVals.length).round()}% pomiarów',
+                '${(spVals.where((v) => v < 90).length * 100 / spVals.length).round()}% pomiarów'
+                '${night.odi != null ? ' · ODI ≈ ${night.odi!.toStringAsFixed(1)}/h' : ''}',
                 style: TextStyle(fontSize: 12, color: spVals.reduce(min) < 90 ? C.danger : C.muted)),
           ]),
           const SizedBox(height: 6),
@@ -420,6 +429,26 @@ class _NightDetailScreenState extends State<NightDetailScreen> {
   Widget _cpapCard(Night night) {
     String f(double? v, String unit, [int dec = 1]) => v == null ? '—' : '${v.toStringAsFixed(dec)}$unit';
     final ahi = night.cpapAhi;
+    List<(DateTime, double)> series(String k) => [
+          for (final r in ext)
+            if (r.$2 == k && r.$3 != null) (r.$1, r.$3!)
+        ];
+    final leak = series('leak'), press = series('press');
+    final evCount = <String, int>{};
+    for (final r in ext) {
+      if (r.$2.startsWith('ev_')) evCount[r.$2] = (evCount[r.$2] ?? 0) + 1;
+    }
+    final sonarEv = evs.where((e) => e.type == SoundType.apnea || e.type == SoundType.hypopnea).length;
+    final leak95 = night.cpapLeak95;
+    Widget chart(List<(DateTime, double)> s, Color c, String unit, {double? goal}) => LineSeriesChart(
+          values: [for (final x in s) x.$2],
+          labels: [for (final x in s) hhmm(x.$1)],
+          color: c,
+          zeroBased: false,
+          goal: goal,
+          height: 120,
+          fmt: (v) => '${v.toStringAsFixed(v >= 10 ? 0 : 1)}$unit',
+        );
     return Section(
       title: 'Aparat CPAP 😷',
       trailing: TextButton(onPressed: () => _editCpap(night), child: Text(ahi == null ? 'Dodaj dane' : 'Edytuj')),
@@ -431,14 +460,54 @@ class _NightDetailScreenState extends State<NightDetailScreen> {
             sub: ahi != null ? apneaCategory(ahi) : null,
             color: ahi == null ? C.muted : (ahi < 5 ? C.gas : (ahi < 15 ? C.moon : C.danger)),
           ),
-          StatTile(label: 'Nieszczelność', value: f(night.cpapLeak, ' l/min')),
           StatTile(
-              label: 'Użycie', value: night.cpapUsageMin == null ? '—' : durHM(night.cpapUsageMin!)),
+            label: 'Nieszczelność',
+            value: f(night.cpapLeak, ' l/min'),
+            sub: leak95 != null ? '95%: ${leak95.toStringAsFixed(1)} l/min' : null,
+            color: leak95 != null && leak95 > 24 ? C.danger : C.text,
+          ),
+          StatTile(label: 'Użycie', value: night.cpapUsageMin == null ? '—' : durHM(night.cpapUsageMin!)),
+          if (night.cpapOai != null || night.cpapCai != null || night.cpapHi != null) ...[
+            StatTile(label: 'Obturacyjne', value: f(night.cpapOai, '/h'), color: C.danger),
+            StatTile(label: 'Centralne', value: f(night.cpapCai, '/h'), color: C.rem),
+            StatTile(label: 'Spłycenia', value: f(night.cpapHi, '/h'), color: C.wake),
+          ],
+          if (night.cpapPress50 != null)
+            StatTile(
+                label: 'Ciśnienie',
+                value: f(night.cpapPress50, ' cmH₂O'),
+                sub: night.cpapPress95 != null ? '95%: ${night.cpapPress95!.toStringAsFixed(1)}' : null),
+          if (night.cpapRr != null) StatTile(label: 'Oddech (aparat)', value: f(night.cpapRr, '/min')),
         ]),
+        if (evCount.isNotEmpty) ...[
+          const SizedBox(height: 10),
+          Text(
+            'Zdarzenia z aparatu: ${[
+              if (evCount['ev_oa'] != null) 'obturacyjne ${evCount['ev_oa']}',
+              if (evCount['ev_ca'] != null) 'centralne ${evCount['ev_ca']}',
+              if (evCount['ev_h'] != null) 'spłycenia ${evCount['ev_h']}',
+              if (evCount['ev_a'] != null) 'bezdechy ${evCount['ev_a']}',
+              if (evCount['ev_arousal'] != null) 'wybudzenia ${evCount['ev_arousal']}',
+            ].join(', ')}${night.sonar ? ' · sonar wykrył: $sonarEv' : ''}. Widać je na wykresie snu (😷).',
+            style: const TextStyle(fontSize: 12),
+          ),
+        ],
+        if (leak.length > 3) ...[
+          const SizedBox(height: 12),
+          const Text('Nieszczelność maski (l/min)', style: TextStyle(fontWeight: FontWeight.w700)),
+          chart(leak, const Color(0xFFFF9E7A), '', goal: 24),
+          const Text('Linia „cel” = 24 l/min — powyżej ResMed uznaje nieszczelność za dużą.',
+              style: TextStyle(fontSize: 11, color: C.muted)),
+        ],
+        if (press.length > 3) ...[
+          const SizedBox(height: 12),
+          const Text('Ciśnienie w masce (cmH₂O)', style: TextStyle(fontWeight: FontWeight.w700)),
+          chart(press, const Color(0xFF6FA8FF), ''),
+        ],
         const SizedBox(height: 8),
         const Text(
-          'AHI odczytasz z wyświetlacza aparatu, aplikacji producenta (np. myAir, DreamMapper) albo zaimportujesz '
-          'z pliku CSV programu OSCAR (Ustawienia → CPAP). Przy dobrze dobranym ciśnieniu AHI zwykle jest < 5.',
+          'Dane: karta SD aparatu ResMed (Ustawienia → CPAP → Importuj z karty SD), plik CSV z OSCAR albo wpis ręczny. '
+          'Przy dobrze dobranym ciśnieniu AHI zwykle jest < 5.',
           style: TextStyle(fontSize: 11, color: C.muted),
         ),
       ]),
@@ -692,7 +761,11 @@ class _NightDetailScreenState extends State<NightDetailScreen> {
                     events: evs,
                     start: night.start,
                     end: end,
-                    showFarts: Settings.instance.detectFarts),
+                    showFarts: Settings.instance.detectFarts,
+                    cpapEvents: [
+                      for (final r in ext)
+                        if (r.$2.startsWith('ev_') && r.$2 != 'ev_arousal') r.$1
+                    ]),
               const SizedBox(height: 6),
               Text(_sourceNote(night.stageSource), style: const TextStyle(fontSize: 11, color: C.muted)),
             ]),

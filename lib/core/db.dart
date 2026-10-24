@@ -18,7 +18,7 @@ class Db {
     final dir = await getDatabasesPath();
     return openDatabase(
       p.join(dir, 'bakometr.db'),
-      version: 7,
+      version: 8,
       onUpgrade: (db, from, to) async {
         if (from < 2) {
           await db.execute('ALTER TABLE nights ADD COLUMN apnea_count INTEGER');
@@ -59,6 +59,13 @@ class Db {
         }
         if (from < 6) {
           await db.execute('ALTER TABLE nights ADD COLUMN interrupt_reason TEXT');
+        }
+        if (from < 8) {
+          for (final c in ['cpap_oai', 'cpap_cai', 'cpap_hi', 'cpap_leak95', 'cpap_press50', 'cpap_press95', 'cpap_rr', 'hr_avg', 'hr_min', 'spo2_min', 'spo2_avg', 'odi']) {
+            await db.execute('ALTER TABLE nights ADD COLUMN $c REAL');
+          }
+          await db.execute('ALTER TABLE minutes ADD COLUMN hr REAL');
+          await _createExt(db);
         }
         if (from < 7) {
           await db.execute('ALTER TABLE nights ADD COLUMN stage_source TEXT');
@@ -111,6 +118,18 @@ class Db {
             moon_phase REAL,
             interrupt_reason TEXT,
             stage_source TEXT,
+            cpap_oai REAL,
+            cpap_cai REAL,
+            cpap_hi REAL,
+            cpap_leak95 REAL,
+            cpap_press50 REAL,
+            cpap_press95 REAL,
+            cpap_rr REAL,
+            hr_avg REAL,
+            hr_min REAL,
+            spo2_min REAL,
+            spo2_avg REAL,
+            odi REAL,
             avg_lux REAL,
             max_lux REAL
           )''');
@@ -136,6 +155,7 @@ class Db {
             breath_rate REAL,
             breath_var REAL,
             sonar_motion REAL,
+            hr REAL,
             lux REAL,
             farts INTEGER,
             snore INTEGER,
@@ -145,8 +165,56 @@ class Db {
             PRIMARY KEY(night_id, idx)
           )''');
         await db.execute('CREATE INDEX ev_night ON events(night_id)');
+        await _createExt(db);
       },
     );
+  }
+
+  /// Dane zewnętrzne nocy: przebiegi i zdarzenia z aparatu CPAP (kind: leak, press, rr, snore, flim,
+  /// ev_oa, ev_ca, ev_h, ev_a, ev_arousal…).
+  static Future<void> _createExt(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS ext(
+        night_id INTEGER NOT NULL,
+        ts INTEGER NOT NULL,
+        kind TEXT NOT NULL,
+        value REAL,
+        dur REAL
+      )''');
+    await db.execute('CREATE INDEX IF NOT EXISTS ext_night ON ext(night_id, kind)');
+  }
+
+  Future<void> replaceExt(int nightId, String kindPrefix, List<(DateTime, String, double?, double?)> rows) async {
+    final d = await db;
+    await d.transaction((tx) async {
+      await tx.delete('ext', where: 'night_id = ? AND kind LIKE ?', whereArgs: [nightId, '$kindPrefix%']);
+      final b = tx.batch();
+      for (final (t, k, v, dur) in rows) {
+        b.insert('ext', {'night_id': nightId, 'ts': t.millisecondsSinceEpoch, 'kind': k, 'value': v, 'dur': dur});
+      }
+      await b.commit(noResult: true);
+    });
+  }
+
+  Future<List<(DateTime, String, double?, double?)>> ext(int nightId) async {
+    final r = await (await db).query('ext', where: 'night_id = ?', whereArgs: [nightId], orderBy: 'ts ASC');
+    return [
+      for (final m in r)
+        (
+          DateTime.fromMillisecondsSinceEpoch(m['ts'] as int),
+          m['kind'] as String,
+          (m['value'] as num?)?.toDouble(),
+          (m['dur'] as num?)?.toDouble()
+        )
+    ];
+  }
+
+  Future<void> setMinuteHr(int nightId, Map<int, double?> byIdx) async {
+    final b = (await db).batch();
+    for (final e in byIdx.entries) {
+      b.update('minutes', {'hr': e.value}, where: 'night_id = ? AND idx = ?', whereArgs: [nightId, e.key]);
+    }
+    await b.commit(noResult: true);
   }
 
   // ---- noce ----
@@ -185,6 +253,7 @@ class Db {
     }
     await d.delete('events', where: 'night_id = ?', whereArgs: [id]);
     await d.delete('minutes', where: 'night_id = ?', whereArgs: [id]);
+    await d.delete('ext', where: 'night_id = ?', whereArgs: [id]);
     await d.delete('nights', where: 'id = ?', whereArgs: [id]);
     await NightLog.delete(id);
   }

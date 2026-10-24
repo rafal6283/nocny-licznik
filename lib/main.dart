@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import 'core/settings.dart';
+import 'core/watch_data.dart';
 import 'core/weather.dart';
 import 'engine/night_engine.dart';
 import 'ui/alarm_screen.dart';
@@ -86,6 +87,7 @@ class _BakometrAppState extends State<BakometrApp> {
         }, required: false, timeoutSec: 120);
       }
       unawaited(WeatherService.backfill());
+      unawaited(WatchNight.backfillRecent());
       setState(() => ready = true);
     } catch (_) {
       setState(() => step = 'Start nie powiódł się');

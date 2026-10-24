@@ -75,13 +75,15 @@ class SleepWaveGraph extends StatefulWidget {
   final DateTime start;
   final DateTime end;
   final bool showFarts;
+  final List<DateTime> cpapEvents; // zdarzenia oddechowe z aparatu CPAP
   const SleepWaveGraph(
       {super.key,
       required this.minutes,
       required this.events,
       required this.start,
       required this.end,
-      this.showFarts = true});
+      this.showFarts = true,
+      this.cpapEvents = const []});
 
   @override
   State<SleepWaveGraph> createState() => _SleepWaveGraphState();
@@ -166,13 +168,13 @@ class _SleepWaveGraphState extends State<SleepWaveGraph> with SingleTickerProvid
           onTapUp: (_) => _clear(),
           onTapCancel: _clear,
           child: SizedBox(
-            height: 240,
+            height: 240 + (widget.cpapEvents.isEmpty ? 0 : 17),
             width: box.maxWidth,
             child: AnimatedBuilder(
               animation: _reveal,
               builder: (context, _) => CustomPaint(
                 painter: _WavePainter(depth, widget.minutes, widget.events, widget.start, widget.end, cursor,
-                    widget.showFarts, Curves.easeInOutCubic.transform(_reveal.value)),
+                    widget.showFarts, Curves.easeInOutCubic.transform(_reveal.value), widget.cpapEvents),
               ),
             ),
           ),
@@ -191,7 +193,8 @@ class _WavePainter extends CustomPainter {
   final double? cursor;
   final bool showFarts;
   final double reveal;
-  _WavePainter(this.depth, this.ms, this.evs, this.start, this.end, this.cursor, this.showFarts, this.reveal);
+  final List<DateTime> cpap;
+  _WavePainter(this.depth, this.ms, this.evs, this.start, this.end, this.cursor, this.showFarts, this.reveal, this.cpap);
 
   @override
   void paint(Canvas c, Size size) {
@@ -256,6 +259,7 @@ class _WavePainter extends CustomPainter {
       if (showFarts) (SoundType.fart, '💨'),
       (SoundType.apnea, '🫁'),
       (SoundType.talk, '💬'),
+      if (cpap.isNotEmpty) (null, '😷'),
     ];
     for (var li = 0; li < lanes.length; li++) {
       final (type, icon) = lanes[li];
@@ -263,6 +267,15 @@ class _WavePainter extends CustomPainter {
       c.drawRRect(RRect.fromRectAndRadius(Rect.fromLTWH(r.left, y, r.width, laneH), const Radius.circular(6)),
           Paint()..color = C.surface2.withValues(alpha: 0.7));
       _text(c, icon, Offset(left - 22, y - 1), style: const TextStyle(fontSize: 11));
+      if (type == null) {
+        final p = Paint()..color = const Color(0xFF5EC8F2);
+        for (final t in cpap) {
+          if (t.isBefore(start) || t.isAfter(end)) continue;
+          final x = xAt(t);
+          c.drawRRect(RRect.fromRectAndRadius(Rect.fromLTWH(x - 1.5, y + 1, 3, laneH - 2), const Radius.circular(2)), p);
+        }
+        continue;
+      }
       final col = C.sound(type);
       if (type == SoundType.snore) {
         final w = max(1.5, r.width * 60 / span);

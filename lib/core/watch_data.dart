@@ -3,6 +3,9 @@ import 'dart:math';
 
 import 'package:bakometr_native/bakometr_native.dart';
 
+import '../engine/night_engine.dart';
+import 'bus.dart';
+import 'db.dart';
 import 'models.dart';
 import 'settings.dart';
 
@@ -43,6 +46,92 @@ class WatchNight {
       ],
       [for (final s in (r['sources'] as List? ?? const [])) s.toString()],
     );
+  }
+
+  /// Spadki saturacji ≥3% względem mediany z poprzednich 10 min (min. 2 min odstępu).
+  /// Przy rzadkich pomiarach z zegarka to przybliżenie wskaźnika ODI.
+  int desaturations() {
+    var c = 0;
+    DateTime? last;
+    for (var i = 0; i < spo2.length; i++) {
+      final (t, v) = spo2[i];
+      final prev = [
+        for (var j = i - 1; j >= 0 && t.difference(spo2[j].$1).inMinutes <= 10; j--) spo2[j].$2
+      ]..sort();
+      if (prev.length < 2) continue;
+      final base = prev[prev.length ~/ 2];
+      if (v <= base - 3 && (last == null || t.difference(last).inSeconds >= 120)) {
+        c++;
+        last = t;
+      }
+    }
+    return c;
+  }
+
+  /// Zapisuje tętno minutowe i podsumowanie do nocy, po czym przelicza fazy (tętno = dodatkowy sygnał).
+  /// Zwraca true, gdy coś zapisano.
+  static Future<bool> applyToNight(Night n, WatchNight w) async {
+    if (n.id == null || w.isEmpty) return false;
+    final ms = await Db.instance.minutes(n.id!);
+    if (w.hr.isNotEmpty && ms.isNotEmpty) {
+      final byIdx = <int, double?>{};
+      var j = 0;
+      for (final m in ms) {
+        final from = m.ts.subtract(const Duration(minutes: 1));
+        var sum = 0.0, c = 0;
+        while (j < w.hr.length && !w.hr[j].$1.isAfter(m.ts)) {
+          if (w.hr[j].$1.isAfter(from)) {
+            sum += w.hr[j].$2;
+            c++;
+          }
+          j++;
+        }
+        byIdx[m.idx] = c == 0 ? null : sum / c;
+      }
+      // Pojedyncze pomiary co kilka minut — uzupełniamy luki do 5 min ostatnią wartością.
+      double? lastV;
+      var gap = 0;
+      for (final m in ms) {
+        final v = byIdx[m.idx];
+        if (v != null) {
+          lastV = v;
+          gap = 0;
+        } else if (lastV != null && ++gap <= 5) {
+          byIdx[m.idx] = lastV;
+        }
+      }
+      await Db.instance.setMinuteHr(n.id!, byIdx);
+      final vals = w.hr.map((e) => e.$2).toList();
+      n.hrAvg = vals.reduce((a, b) => a + b) / vals.length;
+      n.hrMin = vals.reduce(min);
+    }
+    if (w.spo2.isNotEmpty) {
+      final vals = w.spo2.map((e) => e.$2).toList();
+      n.spo2Avg = vals.reduce((a, b) => a + b) / vals.length;
+      n.spo2Min = vals.reduce(min);
+      final hours = max(1, n.durationMin) / 60.0;
+      n.odi = w.spo2.length >= 20 ? w.desaturations() / hours : null;
+    }
+    await Db.instance.updateNight(n);
+    // Przeliczenie faz z tętnem
+    final fresh = await Db.instance.minutes(n.id!);
+    final evs = await Db.instance.events(n.id!);
+    await NightEngine.summarize(n, fresh, evs, push: false);
+    dataChanged();
+    return true;
+  }
+
+  /// Przy starcie: dane z zegarka dla ostatnich nocy, które ich jeszcze nie mają.
+  static Future<int> backfillRecent({int days = 7}) async {
+    if (!supported || !Settings.instance.watchData) return 0;
+    var c = 0;
+    for (final n in await Db.instance.nights(limit: 14)) {
+      if (n.end == null || n.hrAvg != null || n.spo2Avg != null) continue;
+      if (DateTime.now().difference(n.start).inDays > days) continue;
+      final w = await load(n);
+      if (w != null && !w.isEmpty && await applyToNight(n, w)) c++;
+    }
+    return c;
   }
 
   /// Przyjazna nazwa źródła danych.

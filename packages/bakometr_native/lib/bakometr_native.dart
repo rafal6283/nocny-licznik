@@ -172,6 +172,13 @@ class BakometrNative {
     }
   }
 
+  /// Android: wybór karty SD aparatu ResMed; kopiuje STR.edf i *_EVE/*_PLD.edf z dni [from, to]
+  /// (RRRRMMDD) do pamięci podręcznej. Zwraca ścieżki albo null (anulowano).
+  static Future<List<String>?> pickCpapCard({required String from, required String to}) async {
+    final r = await _ch.invokeMethod<List<dynamic>>('pickCpapCard', {'from': from, 'to': to});
+    return r?.map((e) => e.toString()).toList();
+  }
+
   static Future<void> _safe(Future<dynamic> Function() f) async {
     try {
       await f();
