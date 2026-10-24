@@ -913,8 +913,9 @@ class NightEngine extends ChangeNotifier {
   }
 
   /// Liczy podsumowanie nocy i zapisuje je (używane też przy edycji zdarzeń).
-  static Future<void> summarize(Night n, List<MinuteSample> ms, List<SoundEvent> evs) async {
+  static Future<void> summarize(Night n, List<MinuteSample> ms, List<SoundEvent> evs, {bool push = true}) async {
     final sum = SleepAnalysis.analyze(ms, goalMin: Settings.instance.sleepGoalMin);
+    n.stageSource = sum.source;
     n.inBedMin = n.end != null ? n.end!.difference(n.start).inMinutes : sum.inBedMin;
     n.durationMin = sum.sleepMin;
     n.deepMin = sum.deepMin;
@@ -947,10 +948,25 @@ class NightEngine extends ChangeNotifier {
     await Db.instance.updateNight(n);
     if (n.id != null && ms.isNotEmpty) await Db.instance.saveStages(n.id!, ms);
     dataChanged();
-    unawaited(HealthSync.pushNight(n, ms));
+    if (push) unawaited(HealthSync.pushNight(n, ms));
   }
 
   /// Przy starcie aplikacji: domyka noce przerwane przez system (np. ubicie procesu).
+  /// Wersja algorytmu faz — po zmianie przeliczamy zapisane noce.
+  static const stagingVersion = 2;
+
+  static Future<int> reanalyzeAll() async {
+    var c = 0;
+    for (final n in await Db.instance.nights()) {
+      final ms = await Db.instance.minutes(n.id!);
+      if (ms.isEmpty) continue;
+      final evs = await Db.instance.events(n.id!);
+      await summarize(n, ms, evs, push: false);
+      c++;
+    }
+    return c;
+  }
+
   static Future<void> recoverUnfinished() async {
     final unfinished = await Db.instance.unfinishedNights();
     if (unfinished.isEmpty) return;

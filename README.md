@@ -6,7 +6,7 @@ Nocny monitor snu na Android i iOS w stylu Sleep Cycle / Sleep as Android — z 
 
 - **Liczenie wiatrów (opcja, domyślnie wyłączona)** — rozpoznawanie dźwięków modelem [YAMNet](https://github.com/tensorflow/models/tree/master/research/audioset/yamnet) (Google, AudioSet, klasa „Fart”) działającym offline na telefonie
 - **Chrapanie, mówienie przez sen, kaszel** — z krótkimi nagraniami do odsłuchu i weryfikacji rano (✓ / ✗)
-- **Fazy snu i ocena nocy** — ukryty model Markowa (dekodowanie Viterbiego) łączący aktygrafię z ruchu telefonu na materacu, chrapanie, dźwięki i fizjologię cykli snu (estymacja, nie badanie medyczne)
+- **Fazy snu i ocena nocy** — ukryty model Markowa (Viterbi) na wzorcu ruchów w czasie: długie okresy bezruchu = sen głęboki, pojedyncze zmiany pozycji = płytki, częste drobne drgnięcia = REM, gęsty ruch = czuwanie; źródło ruchu: akcelerometr → sonar → dźwięki, a bez sygnału typowy przebieg cykli z wyraźną informacją; plus chrapanie, nieregularność oddechu i fizjologia cykli (estymacja, nie badanie medyczne)
 - **Przerwy w oddechu (bezdech)** — wzorzec „oddech/chrapanie → cisza ≥10 s → westchnienie/chrapnięcie”, wskaźnik przerw na godzinę snu z progami 5/15/30 jak dla AHI, nagrania do odsłuchu. Orientacyjnie, nie diagnoza
 - **Wykres snu w stylu Sleep Cycle** — płynna fala głębokości snu, pasy zdarzeń, kursor
 - **Sonar oddechu (Android)** — niesłyszalny ton 19 kHz z głośnika, echo od klatki piersiowej demodulowane I/Q: częstość oddechu, ruch ciała, przerwy (spadek ≥70%) i spłycenia (≥50%) oddechu ≥10 s, także bez chrapania i przy szumie CPAP; ekran testowy z oddechem na żywo

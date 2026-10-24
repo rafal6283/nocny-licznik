@@ -5,6 +5,8 @@ import '../core/models.dart';
 /// Wynik analizy nocy.
 class SleepSummary {
   final int inBedMin, sleepMin, deepMin, lightMin, remMin, awakeMin, latencyMin, awakenings, score;
+  /// Skąd fazy: 'ruch' (telefon na materacu), 'sonar', 'dźwięk', 'szablon' (brak sygnału).
+  final String source;
   const SleepSummary({
     required this.inBedMin,
     required this.sleepMin,
@@ -15,6 +17,7 @@ class SleepSummary {
     required this.latencyMin,
     required this.awakenings,
     required this.score,
+    this.source = 'ruch',
   });
 }
 
@@ -83,95 +86,20 @@ class SleepAnalysis {
           inBedMin: 0, sleepMin: 0, deepMin: 0, lightMin: 0, remMin: 0, awakeMin: 0,
           latencyMin: 0, awakenings: 0, score: 0);
     }
-    final a = activity(ms);
     final n = ms.length;
-
-    // Wstępne zaśnięcie (do priorów czasowych): 10 kolejnych spokojnych minut.
-    var onset0 = 0;
-    var run = 0;
-    for (var i = 0; i < n; i++) {
-      run = a[i] < 3.0 ? run + 1 : 0;
-      if (run >= 10) {
-        onset0 = i - 9;
-        break;
-      }
+    final mv = movementSignal(ms);
+    List<Stage> st;
+    if (mv == null) {
+      // Brak jakiegokolwiek sygnału ruchu (telefon nie na łóżku, bez sonaru, cicho) —
+      // zamiast „głębokiego snu przez całą noc” typowy przebieg cykli.
+      st = _template(n);
+    } else {
+      st = _decode(ms, mv);
     }
-
-    // Kolejność stanów = Stage.values: wake, rem, light, deep
-    const mu = [1.6, 0.55, 0.35, -0.9]; // oczekiwane ln(aktywność + 0,2)
-    const sd = [1.0, 0.6, 0.65, 0.6];
-    const pSnore = [0.02, 0.06, 0.30, 0.38];
-    const pSound = [0.30, 0.06, 0.05, 0.01];
-    // Sonar: nieregularny oddech (CV odstępów > 0,25) typowy dla REM i czuwania, rzadki w śnie głębokim.
-    const pIrregular = [0.50, 0.45, 0.15, 0.06];
-
-    double gauss(double x, double m, double s) => -0.5 * pow((x - m) / s, 2) - log(s);
-
-    final emis = List.generate(n, (i) {
-      final x = log(a[i] + 0.2);
-      final sinceOnset = max(0, i - onset0);
-      final t = sinceOnset / max(1, n - onset0); // 0..1 postęp nocy
-      final out = List<double>.filled(4, 0);
-      for (var k = 0; k < 4; k++) {
-        var e = gauss(x, mu[k], sd[k]);
-        e += log(ms[i].snore ? pSnore[k] : 1 - pSnore[k]);
-        e += log(ms[i].sounds > 0 ? pSound[k] : 1 - pSound[k]);
-        final bv = ms[i].breathVar;
-        if (bv != null) e += log(bv > 0.25 ? pIrregular[k] : 1 - pIrregular[k]);
-        out[k] = e;
-      }
-      // Priory fizjologiczne
-      out[3] += log(0.25 + 1.5 * pow(1 - t, 2)); // głęboki: wcześnie
-      out[1] += log(0.2 + 1.3 * t); // REM: później
-      if (sinceOnset < 60) out[1] += log(0.15);
-      if (i < onset0) out[0] += 1.5; // przed zaśnięciem raczej czuwanie
-      return out;
-    });
-
-    // Macierz przejść (log), na minutę
-    final tr = [
-      [0.90, 0.01, 0.085, 0.005], // z czuwania
-      [0.03, 0.92, 0.05, 0.0001], // z REM
-      [0.025, 0.02, 0.92, 0.035], // z płytkiego
-      [0.01, 0.0005, 0.06, 0.9295], // z głębokiego
-    ].map((r) => r.map((v) => log(v)).toList()).toList();
-
-    // Viterbi
-    final vit = List.generate(n, (_) => List<double>.filled(4, -1e18));
-    final back = List.generate(n, (_) => List<int>.filled(4, 0));
-    const init = [0.85, 0.01, 0.13, 0.01];
-    for (var k = 0; k < 4; k++) {
-      vit[0][k] = log(init[k]) + emis[0][k];
-    }
-    for (var i = 1; i < n; i++) {
-      for (var k = 0; k < 4; k++) {
-        var best = -1e18;
-        var arg = 0;
-        for (var j = 0; j < 4; j++) {
-          final v = vit[i - 1][j] + tr[j][k];
-          if (v > best) {
-            best = v;
-            arg = j;
-          }
-        }
-        vit[i][k] = best + emis[i][k];
-        back[i][k] = arg;
-      }
-    }
-    final path = List<int>.filled(n, 0);
-    var last = 0;
-    for (var k = 1; k < 4; k++) {
-      if (vit[n - 1][k] > vit[n - 1][last]) last = k;
-    }
-    path[n - 1] = last;
-    for (var i = n - 1; i > 0; i--) {
-      path[i - 1] = back[i][path[i]];
-    }
-    final st = [for (final k in path) Stage.values[k]];
 
     // Zaśnięcie i ostateczne przebudzenie z wyniku dekodowania
     var onset = n;
-    run = 0;
+    var run = 0;
     for (var i = 0; i < n; i++) {
       run = st[i] != Stage.wake ? run + 1 : 0;
       if (run >= 10) {
@@ -232,6 +160,7 @@ class SleepAnalysis {
       latencyMin: min(onset, inBed),
       awakenings: awakenings,
       score: score,
+      source: mv?.source ?? 'szablon',
     );
   }
 
@@ -265,13 +194,217 @@ class SleepAnalysis {
     });
   }
 
+  /// Wybiera źródło ruchu: akcelerometr (telefon na materacu) → sonar → dźwięki (szelest, mowa)
+  /// i ustala próg „zdarzenia ruchowego”. null = brak użytecznego sygnału.
+  static MovementSignal? movementSignal(List<MinuteSample> ms) {
+    final n = ms.length;
+    MovementSignal? tryValues(List<double> v, String source) {
+      final sorted = [...v]..sort();
+      final frac = v.where((x) => x > 0).length / n;
+      // Czujnik z szumem (ruch w prawie każdej minucie) — próg względem typowej minuty.
+      final thr = frac > 0.6 ? max(3 * sorted[n ~/ 2], 1e-9) : 1e-9;
+      final events = v.where((x) => x > thr).length;
+      if (events < max(5, (0.02 * n).ceil())) return null;
+      if (events > 0.9 * n) return null; // „ruch” cały czas — to szum, nie sygnał
+      return MovementSignal(v, thr, source);
+    }
+
+    final accel = tryValues([for (final m in ms) m.motion], 'ruch');
+    if (accel != null) return accel;
+    if (ms.any((m) => m.sonarMotion != null)) {
+      final son = tryValues([for (final m in ms) m.sonarMotion ?? 0], 'sonar');
+      if (son != null) return son;
+    }
+    // Dźwięki: nagły szelest (szczyt minuty ≥12 dB nad jej średnią), mowa, kaszel.
+    final snd = [
+      for (final m in ms)
+        (m.sounds > 0 ? 3.0 : 0.0) +
+            ((m.noiseMax != null && m.noiseDb > -120 && m.noiseMax! - m.noiseDb >= 12) ? (m.noiseMax! - m.noiseDb) / 12 : 0.0)
+    ];
+    return tryValues(snd, 'dźwięk');
+  }
+
+  /// HMM na wzorcu ruchów w czasie (a nie na sile ruchu w pojedynczej minucie):
+  /// • sen głęboki — długie (≥20–25 min) okresy bez żadnego ruchu,
+  /// • płytki — pojedyncze, większe zmiany pozycji co kilka–kilkanaście minut,
+  /// • REM — częstsze, drobne drgnięcia (zwykle w drugiej połowie nocy),
+  /// • czuwanie — gęsty lub silny ruch.
+  static List<Stage> _decode(List<MinuteSample> ms, MovementSignal mv) {
+    final n = ms.length;
+    final v = mv.values;
+    final ev = [for (final x in v) x > mv.threshold];
+    final nz = [for (var i = 0; i < n; i++) if (ev[i]) v[i]]..sort();
+    final med = nz.isEmpty ? 1.0 : nz[nz.length ~/ 2];
+    final bigThr = 2.5 * med;
+
+    int countIn(List<bool> b, int i, int r) {
+      var c = 0;
+      for (var j = max(0, i - r); j <= min(n - 1, i + r); j++) {
+        if (b[j]) c++;
+      }
+      return c;
+    }
+
+    final big = [for (var i = 0; i < n; i++) v[i] > bigThr];
+    final dens = [for (var i = 0; i < n; i++) countIn(ev, i, 7)];
+    final bigd = [for (var i = 0; i < n; i++) countIn(big, i, 3)];
+    final runLen = List<int>.filled(n, 0);
+    var i0 = 0;
+    while (i0 < n) {
+      if (ev[i0]) {
+        i0++;
+        continue;
+      }
+      var j = i0;
+      while (j < n && !ev[j]) {
+        j++;
+      }
+      for (var k = i0; k < j; k++) {
+        runLen[k] = j - i0;
+      }
+      i0 = j;
+    }
+    double wmag(int i) {
+      var sum = 0.0, c = 0;
+      for (var j = max(0, i - 7); j <= min(n - 1, i + 7); j++) {
+        if (ev[j]) {
+          sum += v[j];
+          c++;
+        }
+      }
+      return c == 0 ? 0 : sum / c;
+    }
+
+    int cat(int i) {
+      if ((bigd[i] >= 2 && dens[i] >= 4) || dens[i] >= 8) return 6; // czuwanie
+      if (runLen[i] >= 25) return 0;
+      if (runLen[i] >= 10) return 1;
+      final small = wmag(i) < med;
+      if (dens[i] <= 2) return small ? 2 : 3;
+      return small ? 4 : 5;
+    }
+
+    // P(kategoria | faza); kolejność faz = Stage.values: wake, rem, light, deep
+    //   bezruch≥25  bezruch≥10  rzadkie-drobne  rzadkie-duże  częste-drobne  częste-duże  czuwanie
+    const em = [
+      [0.01, 0.03, 0.03, 0.06, 0.07, 0.12, 0.68],
+      [0.03, 0.15, 0.22, 0.10, 0.33, 0.10, 0.07],
+      [0.17, 0.33, 0.14, 0.18, 0.05, 0.08, 0.05],
+      [0.70, 0.22, 0.04, 0.025, 0.005, 0.005, 0.005],
+    ];
+    const pSnore = [0.02, 0.06, 0.30, 0.38];
+    const pSound = [0.30, 0.06, 0.05, 0.01];
+    const pIrregular = [0.50, 0.45, 0.15, 0.06];
+
+    var onset0 = 0;
+    var run = 0;
+    for (var i = 0; i < n; i++) {
+      run = (!ev[i] || v[i] < bigThr) ? run + 1 : 0;
+      if (run >= 10) {
+        onset0 = i - 9;
+        break;
+      }
+    }
+
+    final emis = List.generate(n, (i) {
+      final c = cat(i);
+      final sinceOnset = max(0, i - onset0);
+      final t = sinceOnset / max(1, n - onset0);
+      final out = List<double>.filled(4, 0);
+      for (var k = 0; k < 4; k++) {
+        var e = log(em[k][c]);
+        e += log(ms[i].snore ? pSnore[k] : 1 - pSnore[k]);
+        if (mv.source != 'dźwięk') e += log(ms[i].sounds > 0 ? pSound[k] : 1 - pSound[k]);
+        final bv = ms[i].breathVar;
+        if (bv != null) e += log(bv > 0.25 ? pIrregular[k] : 1 - pIrregular[k]);
+        out[k] = e;
+      }
+      out[3] += log(0.25 + 1.5 * pow(1 - t, 2)); // głęboki: wcześnie
+      out[1] += log(0.2 + 1.3 * t); // REM: później
+      if (sinceOnset < 60) out[1] += log(0.15);
+      if (i < onset0) out[0] += 1.5;
+      return out;
+    });
+
+    final tr = [
+      [0.90, 0.01, 0.085, 0.005],
+      [0.03, 0.92, 0.05, 0.0001],
+      [0.025, 0.02, 0.92, 0.035],
+      [0.01, 0.0005, 0.06, 0.9295],
+    ].map((r) => r.map((x) => log(x)).toList()).toList();
+
+    final vit = List.generate(n, (_) => List<double>.filled(4, -1e18));
+    final back = List.generate(n, (_) => List<int>.filled(4, 0));
+    const init = [0.85, 0.01, 0.13, 0.01];
+    for (var k = 0; k < 4; k++) {
+      vit[0][k] = log(init[k]) + emis[0][k];
+    }
+    for (var i = 1; i < n; i++) {
+      for (var k = 0; k < 4; k++) {
+        var best = -1e18;
+        var arg = 0;
+        for (var j = 0; j < 4; j++) {
+          final x = vit[i - 1][j] + tr[j][k];
+          if (x > best) {
+            best = x;
+            arg = j;
+          }
+        }
+        vit[i][k] = best + emis[i][k];
+        back[i][k] = arg;
+      }
+    }
+    final path = List<int>.filled(n, 0);
+    var last = 0;
+    for (var k = 1; k < 4; k++) {
+      if (vit[n - 1][k] > vit[n - 1][last]) last = k;
+    }
+    path[n - 1] = last;
+    for (var i = n - 1; i > 0; i--) {
+      path[i - 1] = back[i][path[i]];
+    }
+    return [for (final k in path) Stage.values[k]];
+  }
+
+  /// Typowy przebieg nocy (cykle ~90 min), gdy brak sygnału ruchu.
+  static List<Stage> _template(int n) {
+    final out = List<Stage>.filled(n, Stage.light);
+    const latency = 15;
+    for (var i = 0; i < n; i++) {
+      if (i < min(latency, n)) {
+        out[i] = Stage.wake;
+        continue;
+      }
+      final t = i - latency;
+      final c = t ~/ 90, pos = t % 90;
+      final deepLen = max(5, 40 - c * 10);
+      final remLen = min(35, 10 + c * 6);
+      if (pos >= 20 && pos < 20 + deepLen) {
+        out[i] = Stage.deep;
+      } else if (pos >= 90 - remLen && t >= 60) {
+        out[i] = Stage.rem;
+      }
+    }
+    if (n > latency + 5) out[n - 1] = Stage.wake;
+    return out;
+  }
+
   /// Czy w ostatnich minutach śpiący jest w lekkim śnie / się wierci (inteligentny budzik).
   static bool lightPhaseNow(List<MinuteSample> ms, double currentMinuteMotion) {
     if (ms.length < 15) return true;
+    // Lekki sen = jakikolwiek wyraźny ruch w ostatnich ~3 minutach (jak w Sleep as Android).
     final motion = ms.map((m) => m.motion).where((m) => m > 0).toList();
-    final med = max(_median(motion), 0.02);
+    if (motion.isEmpty) return currentMinuteMotion > 0;
+    final med = _median(motion);
     final recent = [...ms.skip(max(0, ms.length - 2)).map((m) => m.motion), currentMinuteMotion];
-    final peak = recent.reduce(max);
-    return peak / med >= 4.0;
+    return recent.reduce(max) >= 0.5 * med;
   }
+}
+
+/// Sygnał ruchu użyty do faz snu.
+class MovementSignal {
+  final List<double> values;
+  final double threshold;
+  final String source;
+  const MovementSignal(this.values, this.threshold, this.source);
 }

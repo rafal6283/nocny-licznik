@@ -79,6 +79,7 @@ class Night {
   double? wCloud; // %, średnie zachmurzenie
   double? moonPhase; // 0 = nów, 0,5 = pełnia
   String? interruptReason; // gdy noc przerwał system/awaria — opis z Androida
+  String? stageSource; // skąd fazy: ruch / sonar / dźwięk / szablon
   double? avgNoise; // hałas otoczenia: Leq nocy w dBFS (dB SPL = + kalibracja)
   double? maxNoise; // najgłośniejsze 0,5 s nocy w dBFS
   double? avgLux;
@@ -128,6 +129,7 @@ class Night {
     this.wCloud,
     this.moonPhase,
     this.interruptReason,
+    this.stageSource,
     this.avgLux,
     this.maxLux,
   }) : tags = tags ?? [];
@@ -177,6 +179,7 @@ class Night {
         'w_cloud': wCloud,
         'moon_phase': moonPhase,
         'interrupt_reason': interruptReason,
+        'stage_source': stageSource,
         'max_noise': maxNoise,
         'avg_lux': avgLux,
         'max_lux': maxLux,
@@ -227,6 +230,7 @@ class Night {
         wCloud: (m['w_cloud'] as num?)?.toDouble(),
         moonPhase: (m['moon_phase'] as num?)?.toDouble(),
         interruptReason: m['interrupt_reason'] as String?,
+        stageSource: m['stage_source'] as String?,
         maxNoise: (m['max_noise'] as num?)?.toDouble(),
         avgLux: (m['avg_lux'] as num?)?.toDouble(),
         maxLux: (m['max_lux'] as num?)?.toDouble(),

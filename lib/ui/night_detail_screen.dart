@@ -165,6 +165,16 @@ class _NightDetailScreenState extends State<NightDetailScreen> {
     );
   }
 
+  String _sourceNote(String? src) => switch (src) {
+        'ruch' => 'Fazy z ruchu telefonu leżącego na materacu (+ chrapanie i dźwięki). Szacunek, nie badanie snu.',
+        'sonar' => 'Fazy z ruchu i oddechu mierzonych sonarem (+ chrapanie). Szacunek, nie badanie snu.',
+        'dźwięk' => 'Telefon nie wyczuwał ruchu — fazy oszacowane z dźwięków (szelest, chrapanie). Mniej dokładne: '
+            'połóż telefon na materacu albo włącz sonar.',
+        'szablon' => 'Brak sygnału ruchu i dźwięków — pokazany typowy przebieg cykli snu, nie Twoje fazy. '
+            'Połóż telefon na materacu obok poduszki albo włącz sonar.',
+        _ => 'Szacunek faz z ruchu i dźwięku, nie badanie snu.',
+      };
+
   Widget _weatherCard(Night night) {
     String f(double? v, String unit, [int dec = 0]) => v == null ? '—' : '${v.toStringAsFixed(dec)}$unit';
     final trend = night.wPressTrend;
@@ -497,7 +507,8 @@ class _NightDetailScreenState extends State<NightDetailScreen> {
               selected: {stepView},
               onSelectionChanged: (v) => setState(() => stepView = v.first),
             ),
-            child: stepView
+            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              stepView
                 ? Hypnogram(minutes: ms)
                 : SleepWaveGraph(
                     minutes: ms,
@@ -505,6 +516,9 @@ class _NightDetailScreenState extends State<NightDetailScreen> {
                     start: night.start,
                     end: end,
                     showFarts: Settings.instance.detectFarts || night.fartCount > 0),
+              const SizedBox(height: 6),
+              Text(_sourceNote(night.stageSource), style: const TextStyle(fontSize: 11, color: C.muted)),
+            ]),
           ),
           const SizedBox(height: 12),
           if (night.cpap) ...[

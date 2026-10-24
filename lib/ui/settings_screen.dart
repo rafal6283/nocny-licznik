@@ -482,7 +482,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ]),
         ),
         const SizedBox(height: 16),
-        const Center(child: Text('Nocny Licznik 2.4', style: TextStyle(color: C.muted, fontSize: 12))),
+        const Center(child: Text('Nocny Licznik 2.5', style: TextStyle(color: C.muted, fontSize: 12))),
       ],
     );
   }

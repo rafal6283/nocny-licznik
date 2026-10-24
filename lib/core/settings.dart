@@ -107,6 +107,9 @@ class Settings extends ChangeNotifier {
     notifyListeners();
   }
 
+  int get stagingVersion => _i('stagingVersion', 1);
+  set stagingVersion(int v) => _set('stagingVersion', v);
+
   bool get detectTalk => _b('detectTalk', true);
   set detectTalk(bool v) => _set('detectTalk', v);
   bool get detectCough => _b('detectCough', true);

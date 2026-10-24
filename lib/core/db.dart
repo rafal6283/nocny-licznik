@@ -18,7 +18,7 @@ class Db {
     final dir = await getDatabasesPath();
     return openDatabase(
       p.join(dir, 'bakometr.db'),
-      version: 6,
+      version: 7,
       onUpgrade: (db, from, to) async {
         if (from < 2) {
           await db.execute('ALTER TABLE nights ADD COLUMN apnea_count INTEGER');
@@ -59,6 +59,9 @@ class Db {
         }
         if (from < 6) {
           await db.execute('ALTER TABLE nights ADD COLUMN interrupt_reason TEXT');
+        }
+        if (from < 7) {
+          await db.execute('ALTER TABLE nights ADD COLUMN stage_source TEXT');
         }
       },
       onCreate: (db, v) async {
@@ -107,6 +110,7 @@ class Db {
             w_cloud REAL,
             moon_phase REAL,
             interrupt_reason TEXT,
+            stage_source TEXT,
             avg_lux REAL,
             max_lux REAL
           )''');

@@ -63,11 +63,11 @@ class _BakometrAppState extends State<BakometrApp> {
     _init();
   }
 
-  Future<void> _run(String name, Future<void> Function() f, {bool required = true}) async {
+  Future<void> _run(String name, Future<void> Function() f, {bool required = true, int timeoutSec = 8}) async {
     setState(() => step = name);
     _log('→ $name');
     try {
-      await f().timeout(const Duration(seconds: 8));
+      await f().timeout(Duration(seconds: timeoutSec));
       _log('✓ $name');
     } catch (e) {
       _log('✗ $name: $e');
@@ -79,6 +79,12 @@ class _BakometrAppState extends State<BakometrApp> {
     try {
       await _run('Ustawienia', Settings.instance.load);
       await _run('Baza danych', NightEngine.recoverUnfinished, required: false);
+      if (Settings.instance.stagingVersion < NightEngine.stagingVersion) {
+        await _run('Przeliczanie faz snu (nowy algorytm)', () async {
+          await NightEngine.reanalyzeAll();
+          Settings.instance.stagingVersion = NightEngine.stagingVersion;
+        }, required: false, timeoutSec: 120);
+      }
       unawaited(WeatherService.backfill());
       setState(() => ready = true);
     } catch (_) {
