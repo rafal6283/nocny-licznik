@@ -228,8 +228,8 @@ class _NightDetailScreenState extends State<NightDetailScreen> {
         ],
         if (w.stages.isNotEmpty) ...[
           const SizedBox(height: 14),
-          const Text('Fazy snu: zegarek a Nocny Licznik', style: TextStyle(fontWeight: FontWeight.w700, color: C.text)),
-          stageRow('Nocny Licznik', ours),
+          const Text('Fazy snu: zegarek a Rytm Snu', style: TextStyle(fontWeight: FontWeight.w700, color: C.text)),
+          stageRow('Rytm Snu', ours),
           stageRow('Zegarek', theirs),
           const SizedBox(height: 6),
           Text(

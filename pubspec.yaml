@@ -1,7 +1,7 @@
 name: bakometr
-description: "Nocny Licznik — nocny monitor snu z liczeniem wiatrów, chrapania, światła i inteligentnym budzikiem."
+description: "Rytm Snu — rejestracja i analiza snu: fazy, chrapanie, bezdech, CPAP, sonar, pogoda; opcjonalnie liczenie wiatrów."
 publish_to: 'none'
-version: 2.6.0+8
+version: 2.7.0+9
 
 environment:
   sdk: ">=3.6.0 <4.0.0"

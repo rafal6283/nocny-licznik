@@ -102,7 +102,7 @@ jobs:
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: build-${{ github.run_number }}
-          name: Nocny Licznik build ${{ github.run_number }}
+          name: Rytm Snu build ${{ github.run_number }}
           body: |
             Automatyczny build z `${{ github.sha }}`.
             - **Android:** pobierz `nocny-licznik.apk` i zainstaluj.

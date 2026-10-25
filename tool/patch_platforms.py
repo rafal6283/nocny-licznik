@@ -11,7 +11,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-APP_NAME = "Nocny Licznik"
+APP_NAME = "Rytm Snu"
 
 
 def log(msg):
@@ -131,10 +131,10 @@ def patch_ios():
         pl = plistlib.load(f)
     pl["CFBundleDisplayName"] = APP_NAME
     pl["NSMicrophoneUsageDescription"] = (
-        "Nocny Licznik nasłuchuje w nocy, żeby rozpoznać wiatry, chrapanie, przerwy w oddechu, mówienie i kaszel. "
+        "Rytm Snu nasłuchuje w nocy, żeby rozpoznać wiatry, chrapanie, przerwy w oddechu, mówienie i kaszel. "
         "Dźwięk jest analizowany na telefonie i nigdzie nie jest wysyłany.")
     pl["NSCameraUsageDescription"] = (
-        "iPhone nie udostępnia czujnika światła, więc Nocny Licznik na chwilę włącza przednią kamerę, "
+        "iPhone nie udostępnia czujnika światła, więc Rytm Snu na chwilę włącza przednią kamerę, "
         "żeby oszacować jasność w sypialni. Żadne zdjęcia nie są zapisywane.")
     modes = set(pl.get("UIBackgroundModes", []))
     modes.add("audio")

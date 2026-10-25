@@ -32,7 +32,7 @@ public class TrackingService extends Service {
         Notifs.ensureChannels(this);
         String title = intent != null ? intent.getStringExtra(EXTRA_TITLE) : null;
         String text = intent != null ? intent.getStringExtra(EXTRA_TEXT) : null;
-        Notification n = build(this, title != null ? title : "Nocny Licznik nasłuchuje",
+        Notification n = build(this, title != null ? title : "Rytm Snu nasłuchuje",
                 text != null ? text : "");
 
         if (Build.VERSION.SDK_INT >= 30) {

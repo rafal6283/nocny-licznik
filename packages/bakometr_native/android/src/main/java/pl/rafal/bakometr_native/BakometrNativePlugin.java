@@ -43,7 +43,7 @@ public class BakometrNativePlugin implements FlutterPlugin, MethodChannel.Method
     private ActivityPluginBinding activityBinding;
     private HealthSync health;
     private CpapCardPicker cpapPicker;
-    private String trackingTitle = "Nocny Licznik nasłuchuje";
+    private String trackingTitle = "Rytm Snu nasłuchuje";
     private final Handler main = new Handler(Looper.getMainLooper());
 
     @Override

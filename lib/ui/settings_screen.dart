@@ -567,7 +567,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ScaffoldMessenger.of(context)
                     .showSnackBar(SnackBar(content: Text('Noce: ${x.nights} · wiatry: ${x.farts}')));
                 await SharePlus.instance
-                    .share(ShareParams(files: [XFile(x.file.path)], subject: 'Nocny Licznik – wiatry'));
+                    .share(ShareParams(files: [XFile(x.file.path)], subject: 'Rytm Snu – wiatry'));
               },
             ),
             const ListTile(
@@ -578,7 +578,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ]),
         ),
         const SizedBox(height: 16),
-        const Center(child: Text('Nocny Licznik 2.5', style: TextStyle(color: C.muted, fontSize: 12))),
+        const Center(child: Text('Rytm Snu 2.7', style: TextStyle(color: C.muted, fontSize: 12))),
       ],
     );
   }

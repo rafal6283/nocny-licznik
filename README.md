@@ -1,6 +1,6 @@
-# 🌙 Nocny Licznik
+# 🌙 Rytm Snu
 
-Nocny monitor snu na Android i iOS w stylu Sleep Cycle / Sleep as Android — z opcjonalnym **liczeniem puszczanych wiatrów**, sonarem oddechu i trybem CPAP.
+Rejestracja i analiza snu na Android i iOS w stylu Sleep Cycle / Sleep as Android: fazy snu, chrapanie, bezdech, sonar oddechu, tryb CPAP z importem z karty SD, tętno i SpO₂ z zegarka, wpływ pogody. Liczenie wiatrów to opcjonalny dodatek (domyślnie wyłączony).
 
 ## Co potrafi
 

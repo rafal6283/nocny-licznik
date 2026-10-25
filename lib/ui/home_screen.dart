@@ -226,8 +226,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         ),
         const SizedBox(height: 12),
 
-        // --- Dzisiejsza noc: tagi i światło ---
-        Section(
+        // --- Dzisiejsza noc: tagi (tylko gdy liczymy wiatry) i światło ---
+        if (s.detectFarts) ...[
+          Section(
           title: 'Co dziś na talerzu i w głowie?',
           child: Wrap(spacing: 6, runSpacing: 6, children: [
             for (final t in s.tags)
@@ -243,6 +244,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           ]),
         ),
         const SizedBox(height: 12),
+        ],
         Section(
           title: 'Światło w sypialni',
           trailing: TextButton.icon(

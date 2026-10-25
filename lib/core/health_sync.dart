@@ -45,7 +45,7 @@ class HealthSync {
       'id': _id(n),
       'start': n.start.millisecondsSinceEpoch,
       'end': n.end!.millisecondsSinceEpoch,
-      'title': 'Nocny Licznik',
+      'title': 'Rytm Snu',
       'notes': notes,
       'stages': stages,
     };

@@ -122,18 +122,18 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> with WidgetsBindi
     if (m.contains('xiaomi') || m.contains('redmi') || m.contains('poco')) {
       return 'Xiaomi/Redmi/POCO (HyperOS/MIUI) zamyka aplikacje w tle najagresywniej. W ustawieniach aplikacji: '
           'Autostart → włącz; Oszczędzanie baterii → „Bez ograniczeń”. W ostatnich aplikacjach przytrzymaj '
-          'Nocny Licznik i przypnij go (kłódka), żeby „wyczyść wszystko” go nie zamykało.';
+          'Rytm Snu i przypnij go (kłódka), żeby „wyczyść wszystko” go nie zamykało.';
     }
     if (m.contains('samsung')) {
       return 'Samsung: Ustawienia aplikacji → Bateria → „Bez ograniczeń”. W Pielęgnacji urządzenia → Bateria → '
           'Limity zużycia w tle usuń aplikację z „Uśpionych” i „Głęboko uśpionych”.';
     }
     if (m.contains('huawei') || m.contains('honor')) {
-      return 'Huawei/Honor: Bateria → Uruchamianie aplikacji → Nocny Licznik → zarządzaj ręcznie i włącz wszystkie '
+      return 'Huawei/Honor: Bateria → Uruchamianie aplikacji → Rytm Snu → zarządzaj ręcznie i włącz wszystkie '
           'trzy przełączniki.';
     }
     if (m.contains('oneplus') || m.contains('oppo') || m.contains('realme') || m.contains('vivo')) {
-      return 'OnePlus/OPPO/realme/vivo: Bateria → Optymalizacja baterii → Nocny Licznik → „Nie optymalizuj”; '
+      return 'OnePlus/OPPO/realme/vivo: Bateria → Optymalizacja baterii → Rytm Snu → „Nie optymalizuj”; '
           'włącz też „Zezwalaj na działanie w tle” i przypnij aplikację w ostatnich.';
     }
     return 'Jeśli zapis nocy się urywa: wyłącz optymalizację baterii, nie czyść aplikacji z ostatnich w nocy '

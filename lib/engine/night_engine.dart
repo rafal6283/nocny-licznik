@@ -231,7 +231,7 @@ class NightEngine extends ChangeNotifier {
     state = NightState.tracking;
     notifyListeners();
 
-    final fgsError = await BakometrNative.startTracking(title: 'Nocny Licznik nasłuchuje', text: 'Dobranoc 🌙');
+    final fgsError = await BakometrNative.startTracking(title: 'Rytm Snu nasłuchuje', text: 'Dobranoc 🌙');
     final dev = await BakometrNative.deviceInfo();
     final battOpt = await BakometrNative.batteryOptimized();
     journal('START noc #${night!.id} · ${dev['manufacturer'] ?? ''} ${dev['model'] ?? ''} (SDK ${dev['sdk'] ?? '?'}) · '

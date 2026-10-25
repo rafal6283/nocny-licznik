@@ -22,7 +22,7 @@ final class Notifs {
 
         NotificationChannel tracking = new NotificationChannel(
                 CH_TRACKING, "Śledzenie snu", NotificationManager.IMPORTANCE_LOW);
-        tracking.setDescription("Widoczne, gdy Nocny Licznik nasłuchuje w nocy");
+        tracking.setDescription("Widoczne, gdy Rytm Snu nasłuchuje w nocy");
         tracking.setShowBadge(false);
         nm.createNotificationChannel(tracking);
 
