@@ -48,29 +48,19 @@ void main() {
     }
 
     await Future<void>.delayed(const Duration(milliseconds: 1100)); // nazwy kopii mają sekundy
-    // druga kopia: ten sam PDF nie jest wysyłany ponownie, zdjęcie usunięte z aplikacji
+    // druga kopia tego samego dnia: PDF nie jest wysyłany ponownie, zdjęcie usunięto z aplikacji
     await s.backupNow(utf8.encode('baza v2'), blobs: [BackupBlob('docs/a.pdf', () async => pdf)]);
-    expect(server.files.keys.where((k) => k.startsWith('Rodzina/teczka/pliki/rafal/')).length, 2);
+    final blobPuts = server.puts.where((k) => k.startsWith('Rodzina/teczka/pliki/')).length;
+    expect(blobPuts, 2); // tylko przy pierwszej kopii
 
+    // z jednego dnia zostaje najnowsza kopia, a nieużywane zdjęcie znika
     final list = await s.backups();
-    expect(list.length, 2);
-    final r = await s.restoreFull(list.first);
-    expect(utf8.decode(r.data), anyOf('baza v1', 'baza v2'));
-    final latest = list.firstWhere((b) => true);
-    final rr = await s.restoreFull(latest);
-    for (final e in rr.blobs.entries) {
-      final bytes = await rr.blob(e.value);
-      if (e.key == 'docs/a.pdf') expect(bytes, pdf);
-    }
-
-    // po usunięciu starszej kopii zdjęcie przestaje być potrzebne
-    final older = list.firstWhere((b) => b.file != latest.file, orElse: () => list.last);
-    if (older.file != latest.file) {
-      await s.deleteBackup(older);
-      await s.prune();
-      final left = server.files.keys.where((k) => k.startsWith('Rodzina/teczka/pliki/rafal/')).length;
-      expect(left, rr.blobs.length);
-    }
+    expect(list.length, 1);
+    expect(server.files.keys.where((k) => k.startsWith('Rodzina/teczka/pliki/rafal/')).length, 1);
+    final r = await s.restoreFull(list.single);
+    expect(utf8.decode(r.data), 'baza v2');
+    expect(r.blobs.keys, ['docs/a.pdf']);
+    expect(await r.blob(r.blobs['docs/a.pdf']!), pdf);
   });
 
   test('nowy telefon: ten sam kod odtwarza kopię, inny kod jest odrzucany', () async {

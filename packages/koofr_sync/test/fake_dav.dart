@@ -5,6 +5,7 @@ import 'dart:typed_data';
 /// Minimalny serwer WebDAV w pamięci (zachowuje się jak Koofr w tym, czego używa pakiet).
 class FakeDav {
   final files = <String, Uint8List>{};
+  final puts = <String>[];
   final dirs = <String>{''};
   late HttpServer _server;
   final String password;
@@ -85,6 +86,7 @@ class FakeDav {
           res.statusCode = 409;
         } else {
           files[path] = body.takeBytes();
+          puts.add(path);
           res.statusCode = 201;
         }
       case 'GET':
