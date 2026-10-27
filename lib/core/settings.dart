@@ -27,6 +27,12 @@ class Settings extends ChangeNotifier {
     _p = await SharedPreferences.getInstance();
   }
 
+  /// Po przywróceniu kopii: ponowny odczyt z dysku i odświeżenie ekranów.
+  Future<void> reload() async {
+    await _p.reload();
+    notifyListeners();
+  }
+
   int _i(String k, int d) => _p.getInt(k) ?? d;
   double _d(String k, double d) => _p.getDouble(k) ?? d;
   bool _b(String k, bool d) => _p.getBool(k) ?? d;

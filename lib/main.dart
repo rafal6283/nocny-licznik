@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import 'core/cloud.dart';
 import 'core/settings.dart';
 import 'core/watch_data.dart';
 import 'core/weather.dart';
@@ -88,6 +89,8 @@ class _BakometrAppState extends State<BakometrApp> {
       }
       unawaited(WeatherService.backfill());
       unawaited(WatchNight.backfillRecent());
+      // kopia/podgląd Koofr — w tle, bez wpływu na start
+      unawaited(Future.delayed(const Duration(seconds: 5), Cloud.autoRun));
       setState(() => ready = true);
     } catch (_) {
       setState(() => step = 'Start nie powiódł się');
@@ -176,7 +179,10 @@ class _RootState extends State<Root> with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState s) {
-    if (s == AppLifecycleState.resumed) engine.onResumed();
+    if (s == AppLifecycleState.resumed) {
+      engine.onResumed();
+      unawaited(Cloud.autoRun());
+    }
     if (engine.isActive) engine.journal('aplikacja: ${s.name}');
   }
 
@@ -185,6 +191,7 @@ class _RootState extends State<Root> with WidgetsBindingObserver {
   /// Zakończenie nocy (z ekranu nocy lub po wyłączeniu budzika) → podsumowanie.
   Future<void> _finish({String reason = 'zakończona przez użytkownika'}) async {
     final n = await engine.finish(reason: reason);
+    unawaited(Cloud.autoRun(afterNight: true));
     if (n?.id != null && mounted) {
       navigatorKey.currentState?.push(MaterialPageRoute(builder: (_) => NightDetailScreen(nightId: n!.id!)));
     }

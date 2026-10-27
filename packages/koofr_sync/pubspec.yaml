@@ -1,0 +1,15 @@
+name: koofr_sync
+description: >-
+  Wspólna kopia zapasowa i podgląd danych za zgodą dla rodzinnych aplikacji (Rytm Snu, Doba, Teczka, Portfel…)
+  na jednym koncie Koofr przez WebDAV. Wszystko szyfrowane na telefonie (AES-256-GCM, X25519).
+version: 1.0.0
+publish_to: 'none'
+
+environment:
+  sdk: ">=3.6.0 <4.0.0"
+
+dependencies:
+  cryptography: ^2.7.0
+
+dev_dependencies:
+  test: any

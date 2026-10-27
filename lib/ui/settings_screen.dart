@@ -16,6 +16,7 @@ import '../core/reminders.dart';
 import '../core/resmed_import.dart';
 import '../core/settings.dart';
 import '../core/weather.dart';
+import 'cloud_screen.dart';
 import 'diagnostics_screen.dart';
 import 'sonar_test_screen.dart';
 import 'theme.dart';
@@ -522,6 +523,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
         Card(
           child: Column(children: [
             ListTile(
+              leading: const Icon(Icons.cloud_outlined),
+              title: const Text('Kopia i rodzina (Koofr)'),
+              subtitle: const Text('Kopia zapasowa i podgląd snu domowników — za zgodą obu stron'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CloudScreen())),
+            ),
+            ListTile(
               leading: const Icon(Icons.audio_file_outlined),
               title: const Text('Usuń wszystkie nagrania'),
               subtitle: const Text('Liczniki i wykresy zostają'),
@@ -573,12 +581,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
             const ListTile(
               leading: Icon(Icons.lock_outline),
               title: Text('Prywatność'),
-              subtitle: Text('Wszystko zostaje na telefonie (poza nocami, które sam zapiszesz w Health Connect). Rozpoznawanie dźwięków (model YAMNet) działa offline.'),
+              subtitle: Text('Wszystko zostaje na telefonie, chyba że sam włączysz zapis w Health Connect albo kopię/podgląd na Koofr (szyfrowane na telefonie). Rozpoznawanie dźwięków (model YAMNet) działa offline.'),
             ),
           ]),
         ),
         const SizedBox(height: 16),
-        const Center(child: Text('Rytm Snu 2.7', style: TextStyle(color: C.muted, fontSize: 12))),
+        const Center(child: Text('Rytm Snu 2.8', style: TextStyle(color: C.muted, fontSize: 12))),
       ],
     );
   }

@@ -37,6 +37,8 @@ jobs:
       - name: Katalogi platform
         run: PLATFORMS=android bash tool/prepare_platforms.sh
       - run: flutter pub get
+      - name: Testy pakietu koofr_sync
+        run: cd packages/koofr_sync && dart pub get && dart test
       - name: Analiza kodu
         run: |
           set -o pipefail

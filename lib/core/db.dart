@@ -14,6 +14,15 @@ class Db {
 
   Future<Database> get db async => _db ??= await _open();
 
+  static Future<String> get path async => p.join(await getDatabasesPath(), 'bakometr.db');
+
+  /// Zamknięcie bazy (przed podmianą pliku przy przywracaniu kopii). Następne użycie otworzy ją od nowa.
+  Future<void> close() async {
+    final d = _db;
+    _db = null;
+    await d?.close();
+  }
+
   Future<Database> _open() async {
     final dir = await getDatabasesPath();
     return openDatabase(
