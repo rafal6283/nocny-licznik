@@ -1,0 +1,18 @@
+name: koofr_backup_ui
+description: Gotowy ekran „Kopia na Koofr” dla rodzinnych aplikacji Flutter (połączenie, osoba, kopia, przywracanie).
+version: 1.0.0
+publish_to: 'none'
+
+environment:
+  sdk: ">=3.6.0 <4.0.0"
+  flutter: ">=3.27.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  koofr_sync:
+    git:
+      url: https://github.com/rafal6283/nocny-licznik
+      path: packages/koofr_sync
+  flutter_secure_storage: any
+  connectivity_plus: any

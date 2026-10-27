@@ -33,6 +33,8 @@ base32 Crockford `0123456789ABCDEFGHJKMNPQRSTVWXYZ`, 32 znaki w grupach po 4.
 - `seed = HKDF(master, "x25519/<appId>")` — prywatny klucz X25519
 - `codeCheck = hex(HKDF(master, "check")[0..8])`
 
+**Treść kopii** (przed szyfrowaniem): `"KSB1" | u32 długość | JSON {"v":2,"blobs":{ścieżka: id}} | dane aplikacji`.
+
 **Plik `.ksy`**: `"KSY1" | rodzaj | …`, treść = gzip(dane), AAD = 5 bajtów nagłówka + utf8(appId).
 - rodzaj 1 (kopia): `nonce(12) | szyfrogram | tag(16)`, klucz `backup`.
 - rodzaj 2 (podgląd): `efemeryczny X25519 pub(32) | nonce(12) | szyfrogram | tag(16)`,
@@ -41,7 +43,8 @@ base32 Crockford `0123456789ABCDEFGHJKMNPQRSTVWXYZ`, 32 znaki w grupach po 4.
 **Układ folderów** (domyślnie `Rodzina/`):
 ```
 _czlonkowie/<osoba>.json                         {"id","name","codeCheck","keys":{"<appId>":"<pub b64url>"}}
-<appId>/kopie/<osoba>/RRRRMMDD-GGMM_<telefon>.ksy
+<appId>/kopie/<osoba>/RRRRMMDD-GGMMSS_<telefon>.ksy     (+ .refs: zaszyfrowana lista załączników)
+<appId>/pliki/<osoba>/<HMAC-SHA256(klucz kopii, treść)[0..16] hex>.ksy   załączniki, każdy raz
 <appId>/zgody/<właściciel>__<oglądający>/wlasciciel.json   {"scope":{…},"at":ms}
 <appId>/zgody/<właściciel>__<oglądający>/ogladajacy.json   {"at":ms}
 <appId>/dane/<właściciel>__<oglądający>.ksy

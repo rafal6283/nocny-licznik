@@ -106,9 +106,11 @@ void main() {
     });
 
     test('nazwa pliku w obie strony', () {
-      final t = DateTime(2026, 1, 5, 7, 9);
+      final t = DateTime(2026, 1, 5, 7, 9, 3);
       final name = BackupInfo.nameFor(t, 'x1y2z3');
-      expect(name, '20260105-0709_x1y2z3.ksy');
+      expect(name, '20260105-070903_x1y2z3.ksy');
+      // starszy format bez sekund też jest rozpoznawany
+      expect(BackupInfo.parse('ola', DavEntry('20260105-0709_x1y2z3.ksy', false, 1, null))!.at, DateTime(2026, 1, 5, 7, 9));
       final b = BackupInfo.parse('ola', DavEntry(name, false, 42, null))!;
       expect(b.at, t);
       expect(b.device, 'x1y2z3');

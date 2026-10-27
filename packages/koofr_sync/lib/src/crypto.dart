@@ -95,6 +95,13 @@ class KsCrypto {
     }
   }
 
+  /// Nazwa załącznika na Koofr: HMAC treści kluczem kopii (ta sama treść → ta sama nazwa,
+  /// ale bez klucza nie da się sprawdzić, jaki plik się pod nią kryje).
+  Future<String> blobId(List<int> data) async {
+    final mac = await Hmac.sha256().calculateMac(data, secretKey: backupKey);
+    return hex(mac.bytes.sublist(0, 16));
+  }
+
   // ---------------------------------------------------------------- podgląd
 
   /// Szyfruje dane dla jednej osoby. Klucz łączy klucz efemeryczny (poufność przy wycieku

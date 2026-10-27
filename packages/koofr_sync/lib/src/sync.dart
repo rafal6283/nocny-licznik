@@ -41,6 +41,21 @@ class Member {
       );
 }
 
+/// Załącznik kopii (zdjęcie, PDF…): [path] to ścieżka względna w aplikacji, [read] wczytuje treść.
+class BackupBlob {
+  final String path;
+  final Future<List<int>> Function() read;
+  BackupBlob(this.path, this.read);
+}
+
+/// Odczytana kopia: dane aplikacji, załączniki (ścieżka → identyfikator) i ich pobieranie.
+class RestoredBackup {
+  final Uint8List data;
+  final Map<String, String> blobs;
+  final Future<Uint8List> Function(String id) blob;
+  RestoredBackup(this.data, this.blobs, this.blob);
+}
+
 class BackupInfo {
   final String user;
   final String file;
@@ -49,18 +64,19 @@ class BackupInfo {
   final int size;
   BackupInfo(this.user, this.file, this.at, this.device, this.size);
 
-  static final _re = RegExp(r'^(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})_([\w-]+)\.ksy$');
+  static final _re = RegExp(r'^(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})?_([\w-]+)\.ksy$');
 
   static BackupInfo? parse(String user, DavEntry e) {
     final m = _re.firstMatch(e.name);
     if (m == null || e.isDir) return null;
     int g(int i) => int.parse(m.group(i)!);
-    return BackupInfo(user, e.name, DateTime(g(1), g(2), g(3), g(4), g(5)), m.group(6)!, e.size);
+    final sec = m.group(6) == null ? 0 : g(6);
+    return BackupInfo(user, e.name, DateTime(g(1), g(2), g(3), g(4), g(5), sec), m.group(7)!, e.size);
   }
 
   static String nameFor(DateTime t, String device) {
     String two(int v) => v.toString().padLeft(2, '0');
-    return '${t.year}${two(t.month)}${two(t.day)}-${two(t.hour)}${two(t.minute)}_$device.ksy';
+    return '${t.year}${two(t.month)}${two(t.day)}-${two(t.hour)}${two(t.minute)}${two(t.second)}_$device.ksy';
   }
 }
 
@@ -96,7 +112,10 @@ class KoofrSync {
   final String appId;
   final KsStore store;
 
-  KoofrSync({required this.appId, required this.store});
+  /// [davBase] — inny serwer WebDAV (testy); domyślnie Koofr.
+  KoofrSync({required this.appId, required this.store, this.davBase});
+
+  final Uri? davBase;
 
   KoofrConfig? config;
   String? userId;
@@ -117,7 +136,7 @@ class KoofrSync {
   WebDav get dav {
     final c = config;
     if (c == null) throw KoofrException('Najpierw połącz z kontem Koofr.');
-    return _dav ??= WebDav(user: c.email, password: c.appPassword);
+    return _dav ??= WebDav(user: c.email, password: c.appPassword, base: davBase);
   }
 
   String get _root => config!.root;
@@ -149,7 +168,7 @@ class KoofrSync {
 
   /// Sprawdza logowanie i zapisuje konfigurację.
   Future<void> connect(KoofrConfig c) async {
-    final test = WebDav(user: c.email.trim(), password: c.appPassword.trim());
+    final test = WebDav(user: c.email.trim(), password: c.appPassword.trim(), base: davBase);
     try {
       await test.check();
       await test.ensureDir('${c.root}/_czlonkowie');
@@ -274,20 +293,53 @@ class KoofrSync {
   }
 
   String get _myBackups => '$_app/kopie/$userId';
+  String get _myBlobs => '$_app/pliki/$userId';
 
-  Future<BackupInfo> backupNow(List<int> data) async {
+  static const _payloadMagic = [0x4B, 0x53, 0x42, 0x31]; // KSB1
+
+  /// Zapisuje kopię: [data] (np. baza i ustawienia) oraz załączniki [blobs] (zdjęcia, PDF-y).
+  /// Każdy załącznik trafia na Koofr tylko raz — kolejne kopie odwołują się do już wysłanych,
+  /// więc codzienna kopia nie mnoży gigabajtów. [onProgress] dostaje (wysłane, wszystkie) załączniki.
+  Future<BackupInfo> backupNow(List<int> data,
+      {List<BackupBlob> blobs = const [], void Function(int done, int total)? onProgress}) async {
     _requireReady();
     final now = DateTime.now();
+    final refs = <String, String>{};
+    if (blobs.isNotEmpty) {
+      final existing = {for (final e in await dav.list(_myBlobs)) e.name};
+      var i = 0;
+      for (final b in blobs) {
+        final bytes = await b.read();
+        final id = await crypto!.blobId(bytes);
+        if (!existing.contains('$id.ksy')) {
+          await dav.putAtomic('$_myBlobs/$id.ksy', await crypto!.sealBackup(bytes));
+          existing.add('$id.ksy');
+        }
+        refs[b.path] = id;
+        onProgress?.call(++i, blobs.length);
+      }
+    }
+    final header = utf8.encode(jsonEncode({'v': 2, 'blobs': refs}));
+    final payload = BytesBuilder(copy: false)
+      ..add(_payloadMagic)
+      ..add((ByteData(4)..setUint32(0, header.length)).buffer.asUint8List())
+      ..add(header)
+      ..add(data);
     final name = BackupInfo.nameFor(now, deviceId!);
-    final sealed = await crypto!.sealBackup(data);
+    if (refs.isNotEmpty) {
+      // Lista załączników obok kopii — sprzątanie nie musi pobierać całych kopii.
+      await dav.putAtomic(
+          '$_myBackups/${_refsName(name)}', await crypto!.sealBackup(utf8.encode(jsonEncode(refs.values.toSet().toList()))));
+    }
+    final sealed = await crypto!.sealBackup(payload.takeBytes());
     await dav.putAtomic('$_myBackups/$name', sealed);
     await store.write('${_k}backup.last', now.millisecondsSinceEpoch.toString());
     try {
       await prune();
     } catch (_) {}
     _changed();
-    return BackupInfo(userId!, name, DateTime(now.year, now.month, now.day, now.hour, now.minute), deviceId!,
-        sealed.length);
+    return BackupInfo(
+        userId!, name, DateTime(now.year, now.month, now.day, now.hour, now.minute, now.second), deviceId!, sealed.length);
   }
 
   /// Moje kopie (ze wszystkich telefonów), od najnowszej.
@@ -298,25 +350,65 @@ class KoofrSync {
     return list;
   }
 
-  Future<Uint8List> restore(BackupInfo b) async {
+  /// Dane kopii (bez załączników).
+  Future<Uint8List> restore(BackupInfo b) async => (await restoreFull(b)).data;
+
+  /// Kopia wraz z listą załączników do pobrania przez [RestoredBackup.blob].
+  Future<RestoredBackup> restoreFull(BackupInfo b) async {
     _requireReady();
     final file = await dav.get('$_app/kopie/${b.user}/${b.file}');
     if (file == null) throw KoofrException('Kopia zniknęła z Koofr.');
-    return crypto!.openBackup(file);
+    return _parsePayload(await crypto!.openBackup(file), b.user);
   }
 
+  RestoredBackup _parsePayload(Uint8List p, String user) {
+    final hasHeader = p.length >= 8 && List.generate(4, (i) => p[i]).join(',') == _payloadMagic.join(',');
+    if (!hasHeader) return RestoredBackup(p, const {}, (_) async => throw KoofrException('Brak załącznika.'));
+    final len = ByteData.sublistView(p, 4, 8).getUint32(0);
+    final h = (jsonDecode(utf8.decode(p.sublist(8, 8 + len))) as Map).cast<String, Object?>();
+    final refs = ((h['blobs'] as Map?) ?? {}).map((k, v) => MapEntry(k as String, v as String));
+    return RestoredBackup(Uint8List.sublistView(p, 8 + len), refs, (id) async {
+      final f = await dav.get('$_app/pliki/$user/$id.ksy');
+      if (f == null) throw KoofrException('Na Koofr brakuje załącznika kopii.');
+      return crypto!.openBackup(f);
+    });
+  }
+
+  static String _refsName(String backupFile) => backupFile.replaceAll(RegExp(r'\.ksy$'), '.refs');
+
   Future<void> deleteBackup(BackupInfo b) async {
+    await dav.delete('$_app/kopie/${b.user}/${_refsName(b.file)}');
     await dav.delete('$_app/kopie/${b.user}/${b.file}');
     _changed();
   }
 
   /// Usuwa stare kopie: zostaje najnowsza z każdego z [daily] ostatnich dni
-  /// i najnowsza z każdego z [weekly] wcześniejszych tygodni.
+  /// i najnowsza z każdego z [weekly] wcześniejszych tygodni. Potem kasuje załączniki,
+  /// do których nie odwołuje się już żadna kopia.
   Future<int> prune({int daily = 7, int weekly = 4}) async {
     final all = await backups();
     final del = selectForPrune(all, daily: daily, weekly: weekly);
     for (final b in del) {
+      await dav.delete('$_app/kopie/${b.user}/${_refsName(b.file)}');
       await dav.delete('$_app/kopie/${b.user}/${b.file}');
+    }
+    final blobFiles = await dav.list(_myBlobs);
+    if (blobFiles.isNotEmpty) {
+      final used = <String>{};
+      for (final b in all.where((b) => !del.contains(b))) {
+        try {
+          final r = await dav.get('$_app/kopie/${b.user}/${_refsName(b.file)}');
+          if (r != null) {
+            used.addAll((jsonDecode(utf8.decode(await crypto!.openBackup(r))) as List).cast<String>());
+          }
+        } catch (_) {
+          return del.length; // nie wiemy na pewno, co jest używane — nic nie kasujemy
+        }
+      }
+      for (final f in blobFiles) {
+        final id = f.name.replaceAll('.ksy', '');
+        if (f.name.endsWith('.ksy') && !used.contains(id)) await dav.delete('$_myBlobs/${f.name}');
+      }
     }
     return del.length;
   }
