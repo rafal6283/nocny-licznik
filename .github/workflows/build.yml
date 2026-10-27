@@ -38,7 +38,15 @@ jobs:
         run: PLATFORMS=android bash tool/prepare_platforms.sh
       - run: flutter pub get
       - name: Testy pakietu koofr_sync
-        run: cd packages/koofr_sync && dart pub get && dart test --reporter github
+        run: |
+          cd packages/koofr_sync && dart pub get
+          if ! dart test --reporter expanded > test.log 2>&1; then
+            # treść błędów jako jedna adnotacja (logi bywają niedostępne)
+            msg=$(grep -v '^\s*$' test.log | tail -n 80 | sed ':a;N;$!ba;s/%/%25/g;s/\r//g;s/\n/%0A/g')
+            echo "::error title=Testy koofr_sync::$msg"
+            exit 1
+          fi
+          tail -n 3 test.log
       - name: Analiza kodu
         run: |
           set -o pipefail
