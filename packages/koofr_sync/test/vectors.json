@@ -1,0 +1,20 @@
+{
+ "app": "doba",
+ "owner": {
+  "code": "0410-6105-0R3G-G28A-1C60-T3GF-208H-5WKE",
+  "check": "29be2872aa4256e0",
+  "pub": "dnaOodp9DFcbGxDJP2d5FYGcxN2vwAm7TW4M86gOT3M=",
+  "backupKey": "405d6e86dea539141f8d1a45c587fbeb235345d07be011e17df4896f8a0795a8"
+ },
+ "viewer": {
+  "code": "CNK6-ET39-D9NP-RVBE-DXR7-2WKK-EHTQ-DGWQ",
+  "check": "e68f973c4ca28798",
+  "pub": "AB6YY9sZ5Hwbmra3mjIqG3aPEtrLqx12q7Xo33FeV2o="
+ },
+ "backup": "4b53593101000102030405060708090a0b6585e07295116e93220ff9ecdb7576a60d20b6f790bd78ca13423172869f09bb7d46e425cac8c789927cbfc3ae01d7574b5b75907efe2cf7c33b",
+ "backupPlain": "Doba — kopia testowa",
+ "share": "4b53593102e05b1ae322024838095ffdefd865468ddb77b14b2dd275175ea0ab4294fa6d7a1415161718191a1b1c1d1e1f05aa525943ad0ddc2fe1da7f848e2de5b692ba79530e00918674c52a93b7598396f51c7ab244861f313106d0a92d",
+ "sharePlain": "{\"dni\":[]}",
+ "safety": "6552 7524 9313",
+ "blobId": "d6db42017da60cd16f089b1b4331f2b3"
+}
