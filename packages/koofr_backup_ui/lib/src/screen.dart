@@ -465,7 +465,7 @@ class _KoofrBackupScreenState extends State<KoofrBackupScreen> {
       context: context,
       builder: (c) => AlertDialog(
         title: const Text('Przywrócić tę kopię?'),
-        content: Text('Dane z ${_date(b.at)} zastąpią obecne dane aplikacji ${kb.adapter.appName} na tym telefonie.'),
+        content: Text('Kopia z ${_date(b.at)}.\n\n${kb.adapter.restoreWarning}'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Anuluj')),
           FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('Przywróć')),

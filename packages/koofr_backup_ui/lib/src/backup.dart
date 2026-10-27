@@ -39,6 +39,9 @@ abstract class BackupAdapter {
   /// Zastępuje dane aplikacji danymi z kopii. Załączniki pobiera [r.blob].
   Future<void> import(RestoredBackup r, void Function(String step) progress);
 
+  /// Co się stanie przy przywracaniu — pokazywane w potwierdzeniu.
+  String get restoreWarning => 'Dane z kopii zastąpią obecne dane aplikacji $appName na tym telefonie.';
+
   /// Kopię automatyczną wstrzymujemy, gdy aplikacja jest w trakcie czegoś ważnego (np. nagrywania).
   bool get busy => false;
 }
