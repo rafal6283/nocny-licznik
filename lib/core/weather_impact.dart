@@ -43,7 +43,7 @@ List<SleepOutcome> sleepOutcomes({bool farts = false}) => [
       SleepOutcome('latency', 'zasypianie', (n) => n.latencyMin.toDouble(), (d) => _signed(d, ' min'), false),
       SleepOutcome('wake', 'przebudzenia', (n) => n.awakenings.toDouble(), (d) => _signed(d, '', 1), false),
       SleepOutcome('snore', 'chrapanie', (n) => n.snoreMin.toDouble(), (d) => _signed(d, ' min'), false),
-      if (farts) SleepOutcome('farts', 'wiatry', (n) => n.fartCount.toDouble(), (d) => _signed(d, '', 1), false),
+      if (farts) SleepOutcome('farts', 'FF', (n) => n.fartCount.toDouble(), (d) => _signed(d, '', 1), false),
     ];
 
 class OutcomeEffect {

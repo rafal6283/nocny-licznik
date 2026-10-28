@@ -3,7 +3,7 @@ enum SoundType { fart, snore, talk, cough, apnea, hypopnea }
 
 extension SoundTypeX on SoundType {
   String get label => switch (this) {
-        SoundType.fart => 'Wiatr',
+        SoundType.fart => 'FF',
         SoundType.snore => 'Chrapanie',
         SoundType.talk => 'Mówienie',
         SoundType.cough => 'Kaszel',
@@ -11,7 +11,7 @@ extension SoundTypeX on SoundType {
         SoundType.hypopnea => 'Spłycenie oddechu',
       };
   String get emoji => switch (this) {
-        SoundType.fart => '💨',
+        SoundType.fart => '◆',
         SoundType.snore => '😴',
         SoundType.talk => '💬',
         SoundType.cough => '🤧',

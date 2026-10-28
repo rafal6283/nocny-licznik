@@ -227,7 +227,7 @@ class _StatsScreenState extends State<StatsScreen> {
             _delta(durHM(avg(ns.map((n) => n.durationMin))), C.light),
             if (showFarts) ...[
               const SizedBox(width: 6),
-              _delta('💨 ${avg(ns.map((n) => n.fartCount)).toStringAsFixed(1)}', C.gas),
+              _delta('FF ${avg(ns.map((n) => n.fartCount)).toStringAsFixed(1)}', C.gas),
             ],
           ]),
         );
@@ -235,12 +235,12 @@ class _StatsScreenState extends State<StatsScreen> {
     return [
       Padding(
         padding: const EdgeInsets.fromLTRB(4, 12, 4, 10),
-        child: Text(showFarts ? 'Więcej o wiatrach i nawykach' : 'Więcej o nawykach',
+        child: Text(showFarts ? 'Więcej o FF i nawykach' : 'Więcej o nawykach',
             style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
       ),
       TileGrid(columns: 3, children: [
         if (showFarts) ...[
-          StatTile(label: 'Średnio / noc', value: '💨 ${avg(nights.map((n) => n.fartCount)).toStringAsFixed(1)}', color: C.gas),
+          StatTile(label: 'Średnio / noc', value: 'FF ${avg(nights.map((n) => n.fartCount)).toStringAsFixed(1)}', color: C.gas),
           StatTile(label: 'Razem', value: '$totalFarts', sub: '${nights.length} nocy', color: C.gas),
           StatTile(label: 'Rekord', value: '${record.fartCount}', sub: dayLabel(nightDay(record)), color: C.moon),
         ],
@@ -266,7 +266,7 @@ class _StatsScreenState extends State<StatsScreen> {
       if (showFarts) ...[
       const SizedBox(height: 12),
       Section(
-        title: 'O której najczęściej? 💨',
+        title: 'FF — o której najczęściej?',
         trailing: byHour[peak] > 0
             ? Text('szczyt ${two(hourOrder[peak])}:00', style: const TextStyle(color: C.gas, fontWeight: FontWeight.w700))
             : null,
@@ -295,14 +295,14 @@ class _StatsScreenState extends State<StatsScreen> {
                           Text(
                               showFarts
                                   ? '${t.nights} ${plural(t.nights, 'noc', 'noce', 'nocy')} · '
-                                      '${t.fartsWith.toStringAsFixed(1)} vs ${t.fartsWithout.toStringAsFixed(1)} bąków'
+                                      '${t.fartsWith.toStringAsFixed(1)} vs ${t.fartsWithout.toStringAsFixed(1)} FF'
                                   : '${t.nights} ${plural(t.nights, 'noc', 'noce', 'nocy')} · '
                                       'ocena ${t.scoreWith.round()}% vs ${t.scoreWithout.round()}%',
                               style: const TextStyle(fontSize: 12, color: C.muted)),
                         ]),
                       ),
                       if (showFarts) ...[
-                        _delta('${t.fartDeltaPct >= 0 ? '+' : ''}${t.fartDeltaPct.round()}% 💨',
+                        _delta('${t.fartDeltaPct >= 0 ? '+' : ''}${t.fartDeltaPct.round()}% FF',
                             t.fartDeltaPct > 10 ? C.danger : (t.fartDeltaPct < -10 ? C.gas : C.muted)),
                         const SizedBox(width: 6),
                       ],

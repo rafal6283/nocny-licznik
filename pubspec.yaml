@@ -1,7 +1,7 @@
 name: bakometr
 description: "Rytm Snu — rejestracja i analiza snu: fazy, chrapanie, bezdech, CPAP, sonar, pogoda; opcjonalnie liczenie wiatrów."
 publish_to: 'none'
-version: 2.8.1+11
+version: 2.10.0+12
 
 environment:
   sdk: ">=3.6.0 <4.0.0"

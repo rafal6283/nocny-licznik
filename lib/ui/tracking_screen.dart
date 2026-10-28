@@ -213,7 +213,7 @@ class _TrackingScreenState extends State<TrackingScreen> {
               child: Container(
                 color: Colors.black.withValues(alpha: 0.93),
                 alignment: Alignment.center,
-                child: Text(Settings.instance.detectFarts ? '${hhmm(now)}\n💨 ${e.farts}' : hhmm(now),
+                child: Text(Settings.instance.detectFarts ? '${hhmm(now)}\nFF ${e.farts}' : hhmm(now),
                     textAlign: TextAlign.center,
                     style: TextStyle(fontSize: 28, color: C.muted.withValues(alpha: 0.35))),
               ),
@@ -229,7 +229,7 @@ class _TrackingScreenState extends State<TrackingScreen> {
         Text('${e.farts}',
             textAlign: TextAlign.center,
             style: const TextStyle(fontSize: 72, fontWeight: FontWeight.w700, color: C.gas, height: 1)),
-        Text('💨 ${plural(e.farts, 'bąk', 'bąki', 'bąków')} tej nocy',
+        Text('FF tej nocy: ${e.farts}',
             textAlign: TextAlign.center, style: const TextStyle(color: C.gas)),
       ];
     }

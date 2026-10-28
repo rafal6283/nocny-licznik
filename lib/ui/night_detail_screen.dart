@@ -690,9 +690,9 @@ class _NightDetailScreenState extends State<NightDetailScreen> {
                 Expanded(
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                     if (Settings.instance.detectFarts) ...[
-                      Text('💨 ${night.fartCount}',
+                      Text('FF ${night.fartCount}',
                           style: const TextStyle(fontSize: 40, fontWeight: FontWeight.w800, color: C.gas, height: 1)),
-                      Text(plural(night.fartCount, 'bąk', 'bąki', 'bąków'), style: const TextStyle(color: C.gas)),
+                      Text('zdarzeń', style: const TextStyle(color: C.gas)),
                       const SizedBox(height: 6),
                       Text('${durHM(night.durationMin)} snu', style: const TextStyle(fontSize: 16)),
                     ] else ...[
@@ -735,7 +735,7 @@ class _NightDetailScreenState extends State<NightDetailScreen> {
               decoration: BoxDecoration(color: const Color(0xFF3A2A10), borderRadius: BorderRadius.circular(16)),
               child: Text(
                 '⚠️ Przez ${durHM(night.micBlockedMin)} mikrofon był zajęty przez inną aplikację — '
-                'w tym czasie dźwięki (wiatry, chrapanie, oddech) nie były liczone.',
+                'w tym czasie dźwięki (chrapanie, oddech i inne) nie były liczone.',
                 style: const TextStyle(color: C.moon, fontSize: 13),
               ),
             ),

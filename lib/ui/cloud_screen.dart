@@ -975,7 +975,7 @@ class _ExchangeCardState extends State<_ExchangeCard> {
       child: Column(children: [
         SwitchListTile(
           secondary: const Icon(Icons.swap_horiz),
-          title: const Text('Udostępniaj wiatry moim aplikacjom'),
+          title: const Text('Udostępniaj FF moim aplikacjom'),
           subtitle: const Text('Kreska, Doba i Dziennik talerza pobiorą je same przez Koofr, bez eksportu plików. '
               'Widzą je tylko Twoje aplikacje (ten sam kod odzyskiwania).'),
           value: v,

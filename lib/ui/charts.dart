@@ -145,7 +145,7 @@ class _SleepWaveGraphState extends State<SleepWaveGraph> with SingleTickerProvid
       final i = (cursor! * (widget.minutes.length - 1)).round();
       final m = widget.minutes[i];
       label = '${hhmm(m.ts)} · ${m.stage.label}${m.snore ? ' · chrapanie' : ''}'
-          '${widget.showFarts && m.farts > 0 ? ' · 💨${m.farts}' : ''}${m.apneas > 0 ? ' · 🫁${m.apneas}' : ''}'
+          '${widget.showFarts && m.farts > 0 ? ' · FF ${m.farts}' : ''}${m.apneas > 0 ? ' · 🫁${m.apneas}' : ''}'
           '${m.breathRate != null ? ' · ${m.breathRate!.round()} odd./min' : ''}';
     }
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
@@ -256,7 +256,7 @@ class _WavePainter extends CustomPainter {
     double xAt(DateTime t) => r.left + r.width * (t.difference(start).inSeconds / span).clamp(0.0, 1.0).toDouble();
     final lanes = [
       (SoundType.snore, '😴'),
-      if (showFarts) (SoundType.fart, '💨'),
+      if (showFarts) (SoundType.fart, 'FF'),
       (SoundType.apnea, '🫁'),
       (SoundType.talk, '💬'),
       if (cpap.isNotEmpty) (null, '😷'),

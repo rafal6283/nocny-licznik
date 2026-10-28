@@ -48,7 +48,7 @@ class ShareScope {
         cpap => 'Dane z aparatu CPAP',
         watch => 'Tętno i SpO₂ z zegarka',
         notes => 'Tagi, notatki i ocena',
-        farts => 'Wiatry',
+        farts => 'FF',
         _ => k,
       };
 }
@@ -130,10 +130,10 @@ class Cloud {
     String msg;
     if (Settings.instance.detectFarts) {
       final (bytes, _, farts) = await buildFartExchange();
-      msg = await sync.publishExchange('rytm-snu', bytes, force: force) ? 'wysłano wiatry ($farts)' : 'bez zmian';
+      msg = await sync.publishExchange('rytm-snu', bytes, force: force) ? 'wysłano FF ($farts)' : 'bez zmian';
     } else {
       await sync.removeExchange('rytm-snu');
-      msg = 'liczenie wiatrów wyłączone — nic nie jest udostępniane';
+      msg = 'licznik FF wyłączony — nic nie jest udostępniane';
     }
     _lastExchange = DateTime.now();
     lastExchangeMsg.value = msg;

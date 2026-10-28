@@ -329,26 +329,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _head('Wykrywanie'),
         Card(
           child: Column(children: [
-            SwitchListTile(
-              title: const Text('Liczenie wiatrów 💨'),
-              subtitle: const Text('Rozpoznawanie i licznik puszczanych wiatrów (domyślnie wyłączone)'),
-              value: s.detectFarts,
-              onChanged: (v) async {
-                s.detectFarts = v;
-                // noce w Health Connect mają notatkę z liczbą wiatrów — przepisz je bez/z nią
-                if (s.healthConnect) await HealthSync.pushAll();
-              },
-            ),
-            if (s.detectFarts)
-              ListTile(
-                title: const Text('Czułość na wiatry'),
-                subtitle: Slider(
-                  value: s.fartSensitivity,
-                  divisions: 10,
-                  label: '${(s.fartSensitivity * 100).round()}%',
-                  onChanged: (v) => s.fartSensitivity = v,
-                ),
-              ),
             ListTile(
               title: const Text('Czułość na chrapanie 😴'),
               subtitle: Slider(
@@ -564,20 +544,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 onChanged: _setWatchData,
               ),
             ],
-            if (s.detectFarts)
-            ListTile(
-              leading: const Icon(Icons.ios_share),
-              title: const Text('Eksport wiatrów do Kreski'),
-              subtitle: const Text('Plik do porównania z ręcznymi wpisami FF (cała historia)'),
-              onTap: () async {
-                final x = await exportFartExchange();
-                if (!mounted) return;
-                ScaffoldMessenger.of(context)
-                    .showSnackBar(SnackBar(content: Text('Noce: ${x.nights} · wiatry: ${x.farts}')));
-                await SharePlus.instance
-                    .share(ShareParams(files: [XFile(x.file.path)], subject: 'Rytm Snu – wiatry'));
-              },
-            ),
             const ListTile(
               leading: Icon(Icons.lock_outline),
               title: Text('Prywatność'),
@@ -585,8 +551,56 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ]),
         ),
+        // Rzadko używane opcje — zwinięte, bez mówiących nazw.
+        Theme(
+          data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+          child: ExpansionTile(
+            tilePadding: const EdgeInsets.symmetric(horizontal: 4),
+            title: const Text('Więcej', style: TextStyle(color: C.muted, fontSize: 14)),
+            children: [
+              Card(
+                child: Column(children: [
+                  SwitchListTile(
+                    title: const Text('Licznik FF'),
+                    subtitle: const Text('Dodatkowe zdarzenia dźwiękowe w nocy (domyślnie wyłączone)'),
+                    value: s.detectFarts,
+                    onChanged: (v) async {
+                      s.detectFarts = v;
+                      // noce w Health Connect mają notatkę z licznikiem — przepisz je bez/z nią
+                      if (s.healthConnect) await HealthSync.pushAll();
+                    },
+                  ),
+                  if (s.detectFarts) ...[
+                    ListTile(
+                      title: const Text('Czułość FF'),
+                      subtitle: Slider(
+                        value: s.fartSensitivity,
+                        divisions: 10,
+                        label: '${(s.fartSensitivity * 100).round()}%',
+                        onChanged: (v) => s.fartSensitivity = v,
+                      ),
+                    ),
+                    ListTile(
+                      leading: const Icon(Icons.ios_share),
+                      title: const Text('Eksport FF do Kreski'),
+                      subtitle: const Text('Plik do porównania z ręcznymi wpisami (cała historia)'),
+                      onTap: () async {
+                        final x = await exportFartExchange();
+                        if (!mounted) return;
+                        ScaffoldMessenger.of(context)
+                            .showSnackBar(SnackBar(content: Text('Noce: ${x.nights} · FF: ${x.farts}')));
+                        await SharePlus.instance
+                            .share(ShareParams(files: [XFile(x.file.path)], subject: 'Rytm Snu – FF'));
+                      },
+                    ),
+                  ],
+                ]),
+              ),
+            ],
+          ),
+        ),
         const SizedBox(height: 16),
-        const Center(child: Text('Rytm Snu 2.8.1', style: TextStyle(color: C.muted, fontSize: 12))),
+        const Center(child: Text('Rytm Snu 2.10', style: TextStyle(color: C.muted, fontSize: 12))),
       ],
     );
   }

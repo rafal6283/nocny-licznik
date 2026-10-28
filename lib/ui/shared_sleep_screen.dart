@@ -144,7 +144,7 @@ class _SharedNightScreen extends StatelessWidget {
       ('Tętno śr./min.', night.has('hrAvg') ? '${night.numOf('hrAvg')?.round()} / ${night.numOf('hrMin')?.round() ?? '—'}' : null),
       ('SpO₂ śr./min.', night.has('spo2Avg') ? '${night.numOf('spo2Avg')?.round()}% / ${night.numOf('spo2Min')?.round() ?? '—'}%' : null),
       ('Ocena osoby', night.has('rating') && night.numOf('rating') != 0 ? '★' * night.numOf('rating')!.toInt() : null),
-      ('Wiatry', val('farts', (v) => fartsLabel(v.toInt()))),
+      ('FF', val('farts', (v) => fartsLabel(v.toInt()))),
     ].where((r) => r.$2 != null).toList();
 
     return Scaffold(

@@ -34,7 +34,7 @@ String plural(int n, String one, String few, String many) {
   return many;
 }
 
-String fartsLabel(int n) => '$n ${plural(n, 'bąk', 'bąki', 'bąków')}';
+String fartsLabel(int n) => 'FF $n';
 
 String luxLabel(double? lux) {
   if (lux == null) return '—';

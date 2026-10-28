@@ -97,7 +97,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                 ),
                 Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
                   if (Settings.instance.detectFarts) ...[
-                    Text('💨 ${n.fartCount}',
+                    Text('FF ${n.fartCount}',
                         style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: C.gas)),
                     if (isRecord) const Text('🏆 rekord', style: TextStyle(fontSize: 11, color: C.moon)),
                   ] else

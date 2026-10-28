@@ -375,7 +375,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                       Text('Ostatnia noc · ${dayLabel(nightOf(last.start))}', style: const TextStyle(color: C.muted, fontSize: 12)),
                       const SizedBox(height: 4),
                       if (s.detectFarts)
-                        Text('💨 ${fartsLabel(last.fartCount)}',
+                        Text(fartsLabel(last.fartCount),
                             style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: C.gas))
                       else
                         Text('${durHM(last.durationMin)} snu',

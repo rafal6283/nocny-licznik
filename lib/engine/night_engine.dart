@@ -188,7 +188,7 @@ class NightEngine extends ChangeNotifier {
   /// Tekst powiadomienia w trakcie nocy.
   String statusText() {
     final parts = <String>[durHM(elapsed.inMinutes)];
-    if (_s.detectFarts) parts.add('💨 $farts');
+    if (_s.detectFarts) parts.add('FF $farts');
     final rate = sonar?.breathRate;
     if (sonarGood && rate != null) parts.add('🫁 ${rate.round()}/min');
     if (apneas + hypopneas > 0) parts.add('przerwy: ${apneas + hypopneas}');
@@ -236,7 +236,7 @@ class NightEngine extends ChangeNotifier {
     final battOpt = await BakometrNative.batteryOptimized();
     journal('START noc #${night!.id} · ${dev['manufacturer'] ?? ''} ${dev['model'] ?? ''} (SDK ${dev['sdk'] ?? '?'}) · '
         'usługa w tle: ${fgsError ?? 'OK'} · optymalizacja baterii: ${battOpt == null ? '?' : (battOpt ? 'WŁĄCZONA (ryzyko)' : 'wyłączona')} · '
-        'CPAP: ${plan.cpap} · wiatry: ${_s.detectFarts} · budzik: ${plan.alarmAt != null ? hhmm(plan.alarmAt!) : '—'}');
+        'CPAP: ${plan.cpap} · FF: ${_s.detectFarts} · budzik: ${plan.alarmAt != null ? hhmm(plan.alarmAt!) : '—'}');
     if (fgsError != null) lastError = fgsError;
     if (_s.keepScreenOn) await BakometrNative.setKeepScreenOn(true);
 

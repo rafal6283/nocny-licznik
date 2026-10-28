@@ -60,7 +60,7 @@ Future<ExchangeExport> exportFartExchange() async {
   final (bytes, nights, farts) = await buildFartExchange();
   final now = DateTime.now();
   String two(int v) => v.toString().padLeft(2, '0');
-  final out = File('${(await getTemporaryDirectory()).path}/rytm-snu-wiatry-${now.year}-${two(now.month)}-${two(now.day)}.json');
+  final out = File('${(await getTemporaryDirectory()).path}/rytm-snu-ff-${now.year}-${two(now.month)}-${two(now.day)}.json');
   await out.writeAsBytes(bytes);
   return ExchangeExport(out, nights, farts);
 }
