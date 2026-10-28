@@ -499,7 +499,7 @@ class KoofrSync {
     return done;
   }
 
-$anchor
+  // ---------------------------------------------------------------- podgląd za zgodą
 
   static const _ownerFile = 'wlasciciel.json';
   static const _viewerFile = 'ogladajacy.json';
