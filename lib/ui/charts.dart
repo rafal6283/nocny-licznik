@@ -755,7 +755,22 @@ class _BarPainter extends CustomPainter {
           Paint()
             ..color = C.text.withValues(alpha: 0.4)
             ..strokeWidth = 1);
-      _text(c, 'śr. ${_fmt(avg)}', Offset(r.right, y - 14),
+      // Etykieta średniej nie może nachodzić na wartości słupków po prawej stronie.
+      bool collides(double ty) {
+        if (n > 14) return false;
+        for (var i = 0; i < n; i++) {
+          final cx = r.left + slot * i + slot / 2;
+          if (cx + 14 < r.right - 64) continue;
+          final full = max(v[i] > 0 ? bw : 0.0, r.height * v[i] / hi);
+          final ly = r.bottom - full - 14; // górna krawędź etykiety wartości
+          if ((ly - ty).abs() < 13) return true;
+        }
+        return false;
+      }
+
+      var ty = y - 14;
+      if (collides(ty)) ty = y + 3;
+      _text(c, 'śr. ${_fmt(avg)}', Offset(r.right, ty),
           right: true, style: TextStyle(fontSize: 10, color: C.text.withValues(alpha: t)));
     }
     if (labels.isNotEmpty) {

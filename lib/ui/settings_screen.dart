@@ -586,7 +586,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ]),
         ),
         const SizedBox(height: 16),
-        const Center(child: Text('Rytm Snu 2.8', style: TextStyle(color: C.muted, fontSize: 12))),
+        const Center(child: Text('Rytm Snu 2.8.1', style: TextStyle(color: C.muted, fontSize: 12))),
       ],
     );
   }

@@ -9,6 +9,12 @@ String hhmmss(DateTime t) => '${two(t.hour)}:${two(t.minute)}:${two(t.second)}';
 
 String dayLabel(DateTime t) => '${_days[t.weekday - 1]} ${t.day} ${_months[t.month - 1]}';
 
+/// Data „nocy”: noc zaczęta po północy (przed 12:00) należy do poprzedniego wieczoru.
+DateTime nightOf(DateTime start) {
+  final s = start.hour < 12 ? start.subtract(const Duration(days: 1)) : start;
+  return DateTime(s.year, s.month, s.day);
+}
+
 String shortDate(DateTime t) => '${t.day}.${two(t.month)}';
 
 /// „7 h 12 min”, „45 min”

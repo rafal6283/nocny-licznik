@@ -81,7 +81,7 @@ class _SharedSleepScreenState extends State<SharedSleepScreen> {
               Card(
                 child: ListTile(
                   leading: ScoreRing(score: n.score, size: 44),
-                  title: Text(dayLabel(n.start)),
+                  title: Text(dayLabel(nightOf(n.start))),
                   subtitle: Text('${durHM(n.toNight().durationMin)} snu · ${hhmm(n.start)}–${n.end == null ? '?' : hhmm(n.end!)}'),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () => Navigator.push(context,
@@ -148,7 +148,7 @@ class _SharedNightScreen extends StatelessWidget {
     ].where((r) => r.$2 != null).toList();
 
     return Scaffold(
-      appBar: AppBar(title: Text('$owner · ${dayLabel(night.start)}')),
+      appBar: AppBar(title: Text('$owner · ${dayLabel(nightOf(night.start))}')),
       body: ListView(padding: const EdgeInsets.fromLTRB(16, 8, 16, 32), children: [
         Center(child: ScoreRing(score: n.score, size: 120)),
         const SizedBox(height: 16),

@@ -673,7 +673,7 @@ class _NightDetailScreenState extends State<NightDetailScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(dayLabel(night.start)),
+        title: Text(dayLabel(nightOf(night.start))),
         actions: [
           IconButton(tooltip: 'Dziennik nocy', onPressed: () => _showLog(night), icon: const Icon(Icons.receipt_long)),
           IconButton(onPressed: _delete, icon: const Icon(Icons.delete_outline)),

@@ -372,7 +372,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   const SizedBox(width: 16),
                   Expanded(
                     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Text('Ostatnia noc · ${dayLabel(last.start)}', style: const TextStyle(color: C.muted, fontSize: 12)),
+                      Text('Ostatnia noc · ${dayLabel(nightOf(last.start))}', style: const TextStyle(color: C.muted, fontSize: 12)),
                       const SizedBox(height: 4),
                       if (s.detectFarts)
                         Text('💨 ${fartsLabel(last.fartCount)}',

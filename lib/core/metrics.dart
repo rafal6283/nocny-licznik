@@ -298,10 +298,7 @@ DateTime _monday(DateTime d) {
 }
 
 /// Noc „należy” do dnia, w którym się zaczęła (noc po północy — do poprzedniego dnia).
-DateTime nightDay(Night n) {
-  final s = n.start.hour < 12 ? n.start.subtract(const Duration(days: 1)) : n.start;
-  return DateTime(s.year, s.month, s.day);
-}
+DateTime nightDay(Night n) => nightOf(n.start);
 
 List<MetricPoint> metricSeries(Metric m, List<Night> chrono, Period p) {
   double? mean(List<Night> ns) {
