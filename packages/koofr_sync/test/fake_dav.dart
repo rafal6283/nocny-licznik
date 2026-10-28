@@ -6,6 +6,7 @@ import 'dart:typed_data';
 class FakeDav {
   final files = <String, Uint8List>{};
   final puts = <String>[];
+  final mtimes = <String, DateTime>{};
   final dirs = <String>{''};
   late HttpServer _server;
   final String password;
@@ -66,7 +67,7 @@ class FakeDav {
           xml.write('<D:response><D:href>$href</D:href><D:propstat><D:prop>'
               '<D:resourcetype>${isDir ? '<D:collection/>' : ''}</D:resourcetype>'
               '${isDir ? '' : '<D:getcontentlength>${files[e]!.length}</D:getcontentlength>'}'
-              '<D:getlastmodified>${HttpDate.format(DateTime.now())}</D:getlastmodified>'
+              '<D:getlastmodified>${HttpDate.format(mtimes[e] ?? DateTime(2026))}</D:getlastmodified>'
               '</D:prop></D:propstat></D:response>');
         }
         xml.write('</D:multistatus>');
@@ -86,6 +87,7 @@ class FakeDav {
           res.statusCode = 409;
         } else {
           files[path] = body.takeBytes();
+          mtimes[path] = DateTime.now();
           puts.add(path);
           res.statusCode = 201;
         }
@@ -114,6 +116,7 @@ class FakeDav {
           res.statusCode = 404;
         } else {
           files[dest] = f;
+          mtimes[dest] = mtimes.remove(path) ?? DateTime.now();
           res.statusCode = 201;
         }
       default:

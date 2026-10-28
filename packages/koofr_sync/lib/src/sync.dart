@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'dart:math';
 import 'dart:typed_data';
 
+import 'package:cryptography/cryptography.dart' show Sha256;
+
 import 'config.dart';
 import 'crypto.dart';
 import 'recovery_code.dart';
@@ -443,7 +445,61 @@ class KoofrSync {
     return sorted.where((b) => !keep.contains(b)).toList();
   }
 
-  // ---------------------------------------------------------------- podgląd za zgodą
+  // ---------------------------------------------------------------- wymiana między aplikacjami
+
+  /// Folder wymiany danej osoby: `<root>/_wymiana/<osoba>/<nazwa>.ksy`. Pliki odczyta każda
+  /// aplikacja tej osoby (ten sam kod odzyskiwania), nikt inny.
+  String get _myExchange => '$_root/_wymiana/$userId';
+
+  /// Publikuje plik wymiany (np. „rytm-snu”), o ile treść zmieniła się od ostatniej publikacji
+  /// z tego telefonu. Zwraca true, gdy wysłano.
+  Future<bool> publishExchange(String name, List<int> data, {bool force = false}) async {
+    _requireReady();
+    final digest = KsCrypto.hex((await Sha256().hash(data)).bytes.sublist(0, 16));
+    final key = '${_k}ex.pub.$userId.$name';
+    if (!force && await store.read(key) == digest) return false;
+    await dav.putAtomic('$_myExchange/$name.ksy', await crypto!.sealExchange(data));
+    await store.write(key, digest);
+    return true;
+  }
+
+  /// Usuwa mój plik wymiany (wyłączenie publikowania).
+  Future<void> removeExchange(String name) async {
+    _requireReady();
+    await dav.delete('$_myExchange/$name.ksy');
+    await store.delete('${_k}ex.pub.$userId.$name');
+  }
+
+  /// Dostępne pliki wymiany tej osoby: nazwa → (czas zmiany, rozmiar).
+  Future<Map<String, (DateTime?, int)>> exchangeFiles() async {
+    _requireReady();
+    return {
+      for (final e in await dav.list(_myExchange))
+        if (!e.isDir && e.name.endsWith('.ksy')) e.name.substring(0, e.name.length - 4): (e.modified, e.size),
+    };
+  }
+
+  /// Pobiera pliki wymiany, które [want] akceptuje i które zmieniły się od ostatniego pobrania
+  /// na tym telefonie, i przekazuje je do [handle]. Zwraca nazwy przetworzonych plików.
+  Future<List<String>> pullExchange(bool Function(String name) want,
+      Future<void> Function(String name, Uint8List data) handle, {bool force = false}) async {
+    _requireReady();
+    final done = <String>[];
+    for (final e in (await exchangeFiles()).entries) {
+      if (!want(e.key)) continue;
+      final stamp = '${e.value.$1?.millisecondsSinceEpoch ?? 0}/${e.value.$2}';
+      final key = '${_k}ex.seen.$userId.${e.key}';
+      if (!force && await store.read(key) == stamp) continue;
+      final file = await dav.get('$_myExchange/${e.key}.ksy');
+      if (file == null) continue;
+      await handle(e.key, await crypto!.openExchange(file));
+      await store.write(key, stamp);
+      done.add(e.key);
+    }
+    return done;
+  }
+
+$anchor
 
   static const _ownerFile = 'wlasciciel.json';
   static const _viewerFile = 'ogladajacy.json';

@@ -80,7 +80,7 @@ class ExitReason {
 
   String get tip => switch (reason) {
         2 || 9 || 13 || 14 =>
-          'Wyłącz optymalizację baterii dla Nocnego Licznika (przycisk na ekranie Noc lub Ustawienia → Diagnostyka). '
+          'Wyłącz optymalizację baterii dla Rytmu Snu (przycisk na ekranie Noc lub Ustawienia → Diagnostyka). '
               'Na Xiaomi/Redmi/POCO włącz też „Autostart” i ustaw oszczędzanie baterii na „Bez ograniczeń”; '
               'na Samsungu ustaw baterię na „Bez ograniczeń” i usuń aplikację z „Uśpionych aplikacji”.',
         3 => 'Zamknij inne aplikacje na noc i nie uruchamiaj gier/aparatu w tle.',

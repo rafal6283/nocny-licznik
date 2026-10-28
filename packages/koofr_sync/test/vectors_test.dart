@@ -29,5 +29,9 @@ void main() {
     expect(utf8.decode(await viewer.openFrom(owner.publicKey, hex(v['share'] as String))), v['sharePlain']);
     expect(await KsCrypto.safetyNumber(app, owner.publicKey, viewer.publicKey), v['safety']);
     expect(await owner.blobId(utf8.encode('załącznik')), v['blobId']);
+    // wymiana: ten sam klucz w każdej aplikacji tej osoby
+    final other = await KsCrypto.fromCode((await RecoveryCode.parse(v['owner']['code'] as String))!, 'kreska');
+    expect(utf8.decode(await other.openExchange(hex(v['exchange'] as String))), v['exchangePlain']);
+    expect(() => viewer.openExchange(hex(v['exchange'] as String)), throwsA(isA<KsCryptoException>()));
   });
 }

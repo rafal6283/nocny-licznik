@@ -121,4 +121,36 @@ void main() {
     expect(await owner.publishShares(build), 0);
     expect(await owner.myConsents(), isEmpty);
   });
+
+  test('wymiana między aplikacjami tej samej osoby', () async {
+    final code = await RecoveryCode.generate();
+    final snu = phone('rytm-snu');
+    await snu.load();
+    await snu.connect(cfg);
+    await snu.join(newName: 'Rafał', code: code);
+    final kreska = phone('kreska');
+    await kreska.load();
+    await kreska.connect(cfg);
+    await kreska.join(existingId: 'rafal', code: (await RecoveryCode.parse(await code.format()))!);
+    final ania = phone('kreska');
+    await ania.load();
+    await ania.connect(cfg);
+    await ania.join(newName: 'Ania', code: await RecoveryCode.generate());
+
+    expect(await snu.publishExchange('rytm-snu', utf8.encode('v1')), isTrue);
+    expect(await snu.publishExchange('rytm-snu', utf8.encode('v1')), isFalse); // bez zmian — bez wysyłki
+    final got = <String, String>{};
+    Future<void> h(String n, List<int> d) async => got[n] = utf8.decode(d);
+    expect(await kreska.pullExchange((n) => n == 'rytm-snu', h), ['rytm-snu']);
+    expect(got['rytm-snu'], 'v1');
+    expect(await kreska.pullExchange((n) => n == 'rytm-snu', h), isEmpty); // już pobrane
+    expect(await ania.pullExchange((_) => true, h), isEmpty); // inna osoba nie widzi
+    await Future<void>.delayed(const Duration(milliseconds: 1100));
+    await snu.publishExchange('rytm-snu', utf8.encode('v2'));
+    // ten sam rozmiar, inny czas — pobierane ponownie
+    expect(await kreska.pullExchange((n) => n == 'rytm-snu', h), ['rytm-snu']);
+    expect(got['rytm-snu'], 'v2');
+    await snu.removeExchange('rytm-snu');
+    expect(await kreska.exchangeFiles(), isEmpty);
+  });
 }

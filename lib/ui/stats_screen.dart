@@ -178,7 +178,7 @@ class _StatsScreenState extends State<StatsScreen> {
         ),
       );
 
-  /// Sekcje własne Nocnego Licznika (pod statystykami w stylu Sleep Cycle).
+  /// Sekcje własne Rytmu Snu (pod statystykami w stylu Sleep Cycle).
   List<Widget> _extras(List<Night> nights, bool showFarts) {
     if (nights.isEmpty) return [];
     final ids = nights.map((n) => n.id).toSet();

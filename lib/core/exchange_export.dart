@@ -9,7 +9,8 @@ import 'models.dart';
 /// Eksport wiatrów do Kreski (wspólny format „wymiana-zdarzen” v1).
 ///
 /// {
-///   "format": "wymiana-zdarzen", "version": 1, "source": "nocny-licznik", "exported_at": ms,
+///   "format": "wymiana-zdarzen", "version": 1, "source": "rytm-snu", "exported_at": ms,
+///   (do wersji 2.8 źródło nazywało się "nocny-licznik" — aplikacje odbierające akceptują oba)
 ///   "windows": [{"start": ms, "end": ms}],     // noce, w których aplikacja nasłuchiwała
 ///   "events":  [{"id": "...", "type": "fart", "start": ms, "confidence": 0.8, "verified": true|false|null}]
 /// }
@@ -23,7 +24,8 @@ class ExchangeExport {
   ExchangeExport(this.file, this.nights, this.farts);
 }
 
-Future<ExchangeExport> exportFartExchange() async {
+/// Treść pliku wymiany (cała historia wiatrów).
+Future<(List<int>, int, int)> buildFartExchange() async {
   final db = Db.instance;
   final nights = await db.nights();
   final finished = {for (final n in nights) n.id};
@@ -31,13 +33,10 @@ Future<ExchangeExport> exportFartExchange() async {
     ..sort((a, b) => a.ts.compareTo(b.ts));
 
   final now = DateTime.now();
-  String two(int v) => v.toString().padLeft(2, '0');
-  final out = File(
-      '${(await getTemporaryDirectory()).path}/nocny-licznik-wiatry-${now.year}-${two(now.month)}-${two(now.day)}.json');
-  await out.writeAsString(jsonEncode({
+  final bytes = utf8.encode(jsonEncode({
     'format': 'wymiana-zdarzen',
     'version': 1,
-    'source': 'nocny-licznik',
+    'source': 'rytm-snu',
     'exported_at': now.millisecondsSinceEpoch,
     'windows': [
       for (final n in nights.reversed)
@@ -54,5 +53,14 @@ Future<ExchangeExport> exportFartExchange() async {
         },
     ],
   }));
-  return ExchangeExport(out, nights.length, farts.where((e) => e.counts).length);
+  return (bytes, nights.length, farts.where((e) => e.counts).length);
+}
+
+Future<ExchangeExport> exportFartExchange() async {
+  final (bytes, nights, farts) = await buildFartExchange();
+  final now = DateTime.now();
+  String two(int v) => v.toString().padLeft(2, '0');
+  final out = File('${(await getTemporaryDirectory()).path}/rytm-snu-wiatry-${now.year}-${two(now.month)}-${two(now.day)}.json');
+  await out.writeAsBytes(bytes);
+  return ExchangeExport(out, nights, farts);
 }

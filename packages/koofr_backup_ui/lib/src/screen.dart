@@ -408,6 +408,10 @@ class _KoofrBackupScreenState extends State<KoofrBackupScreen> {
             ),
           ]),
         ),
+        if (kb.adapter.exchange != null) ...[
+          _head('Wymiana z moimi aplikacjami'),
+          _ExchangeCard(kb: kb),
+        ],
       ];
 
   static String _date(DateTime t) {
@@ -623,5 +627,106 @@ class _ConnectFormState extends State<_ConnectForm> {
         ),
       ),
     ]);
+  }
+}
+
+/// Automatyczna wymiana danych z innymi aplikacjami tej samej osoby.
+class _ExchangeCard extends StatefulWidget {
+  final KoofrBackup kb;
+  const _ExchangeCard({required this.kb});
+
+  @override
+  State<_ExchangeCard> createState() => _ExchangeCardState();
+}
+
+class _ExchangeCardState extends State<_ExchangeCard> {
+  bool loaded = false, on = false, publish = true, busy = false;
+  final src = <String, bool>{};
+
+  ExchangeAdapter get ex => widget.kb.adapter.exchange!;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final kb = widget.kb;
+    on = await kb.exchangeOn();
+    publish = await kb.publishOn();
+    for (final s in ex.sources) {
+      src[s.$1] = await kb.sourceOn(s.$1);
+    }
+    if (mounted) setState(() => loaded = true);
+  }
+
+  Future<void> _run({bool force = true}) async {
+    setState(() => busy = true);
+    try {
+      await widget.kb.exchangeNow(force: force);
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+    } finally {
+      if (mounted) setState(() => busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!loaded) return const SizedBox(height: 48);
+    final kb = widget.kb;
+    final extra = on ? ex.extraSettings(context) : null;
+    return Card(
+      child: Column(children: [
+        SwitchListTile(
+          secondary: const Icon(Icons.swap_horiz),
+          title: const Text('Automatyczna wymiana danych'),
+          subtitle: const Text('Przez Koofr, bez ręcznego eksportu plików. Widzą je tylko Twoje aplikacje '
+              '(ten sam kod odzyskiwania).'),
+          value: on,
+          onChanged: (v) async {
+            await kb.setExchangeOn(v);
+            setState(() => on = v);
+            if (v) unawaited(_run());
+          },
+        ),
+        if (on) ...[
+          if (ex.publishes != null)
+            SwitchListTile(
+              title: const Text('Udostępniaj moim aplikacjom'),
+              subtitle: Text(ex.publishes!),
+              value: publish,
+              onChanged: (v) async {
+                await kb.setPublishOn(v);
+                setState(() => publish = v);
+                unawaited(_run());
+              },
+            ),
+          for (final s in ex.sources)
+            SwitchListTile(
+              title: Text('Pobieraj: ${s.$2}'),
+              value: src[s.$1] ?? true,
+              onChanged: (v) async {
+                await kb.setSourceOn(s.$1, v);
+                setState(() => src[s.$1] = v);
+                if (v) unawaited(_run());
+              },
+            ),
+          if (extra != null) extra,
+          ValueListenableBuilder<String?>(
+            valueListenable: kb.lastExchange,
+            builder: (c, last, _) => ListTile(
+              leading: busy
+                  ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2))
+                  : const Icon(Icons.sync),
+              title: const Text('Wymień teraz'),
+              subtitle: Text(last == null ? 'Automatycznie przy otwarciu aplikacji' : 'Ostatnio: $last'),
+              onTap: busy ? null : _run,
+            ),
+          ),
+        ],
+      ]),
+    );
   }
 }

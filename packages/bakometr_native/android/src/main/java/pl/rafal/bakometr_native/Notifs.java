@@ -33,7 +33,7 @@ final class Notifs {
 
         NotificationChannel alarm = new NotificationChannel(
                 CH_ALARM, "Budzik", NotificationManager.IMPORTANCE_HIGH);
-        alarm.setDescription("Budzik Nocnego Licznika");
+        alarm.setDescription("Budzik Rytmu Snu");
         alarm.setBypassDnd(true);
         alarm.setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM),
                 new AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ALARM).build());

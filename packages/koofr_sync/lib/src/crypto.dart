@@ -27,6 +27,7 @@ class KsCrypto {
   static const _magic = [0x4B, 0x53, 0x59, 0x31]; // KSY1
   static const kindBackup = 1;
   static const kindShare = 2;
+  static const kindExchange = 3;
 
   static final _aes = AesGcm.with256bits();
   static final _x25519 = X25519();
@@ -36,6 +37,9 @@ class KsCrypto {
   /// Klucze jednej osoby w jednej aplikacji, wyprowadzone z kodu odzyskiwania.
   final String appId;
   final SecretKey backupKey;
+
+  /// Klucz wymiany danych między aplikacjami tej samej osoby (wspólny dla wszystkich aplikacji).
+  final SecretKey exchangeKey;
   final SimpleKeyPair identity;
   final SimplePublicKey publicKey;
 
@@ -43,16 +47,17 @@ class KsCrypto {
   /// (zapisany w katalogu członków; nie pozwala odtworzyć kodu).
   final String codeCheck;
 
-  KsCrypto._(this.appId, this.backupKey, this.identity, this.publicKey, this.codeCheck);
+  KsCrypto._(this.appId, this.backupKey, this.exchangeKey, this.identity, this.publicKey, this.codeCheck);
 
   static Future<KsCrypto> fromCode(RecoveryCode code, String appId) async {
     final master = await _derive(code.entropy, 'master');
     final backup = await _derive(master, 'backup/$appId');
+    final exchange = await _derive(master, 'exchange');
     final seed = await _derive(master, 'x25519/$appId');
     final check = await _derive(master, 'check');
     final kp = await _x25519.newKeyPairFromSeed(seed);
     final pub = await kp.extractPublicKey();
-    return KsCrypto._(appId, SecretKey(backup), kp, pub, hex(check.sublist(0, 8)));
+    return KsCrypto._(appId, SecretKey(backup), SecretKey(exchange), kp, pub, hex(check.sublist(0, 8)));
   }
 
   /// Skrót kodu bez wyprowadzania kluczy aplikacji — do porównań przy dołączaniu.
@@ -100,6 +105,30 @@ class KsCrypto {
   Future<String> blobId(List<int> data) async {
     final mac = await Hmac.sha256().calculateMac(data, secretKey: backupKey);
     return hex(mac.bytes.sublist(0, 16));
+  }
+
+  // ---------------------------------------------------------------- wymiana między aplikacjami
+
+  static final _exchangeAad = utf8.encode('wymiana');
+
+  /// Plik wymiany (rodzaj 3): jak kopia, ale kluczem wspólnym dla wszystkich aplikacji osoby.
+  Future<Uint8List> sealExchange(List<int> data) async {
+    final header = [..._magic, kindExchange];
+    final box = await _aes.encrypt(gzip.encode(data),
+        secretKey: exchangeKey, nonce: _aes.newNonce(), aad: [...header, ..._exchangeAad]);
+    return Uint8List.fromList([...header, ...box.concatenation()]);
+  }
+
+  Future<Uint8List> openExchange(List<int> file) async {
+    _checkHeader(file, kindExchange);
+    final header = file.sublist(0, 5);
+    try {
+      final box = SecretBox.fromConcatenation(file.sublist(5), nonceLength: 12, macLength: 16);
+      final clear = await _aes.decrypt(box, secretKey: exchangeKey, aad: [...header, ..._exchangeAad]);
+      return Uint8List.fromList(gzip.decode(clear));
+    } on SecretBoxAuthenticationError {
+      throw KsCryptoException('Nie da się odczytać danych wymiany — inny kod odzyskiwania w tej aplikacji.');
+    }
   }
 
   // ---------------------------------------------------------------- podgląd

@@ -45,6 +45,11 @@ def seal_for(sender_priv, sender_pub, recip_pub, app, data, eph_seed, nonce):
     h=MAGIC+bytes([2])
     return h+ephpub+nonce+AESGCM(k).encrypt(nonce, gzip.compress(data, mtime=0), h+app.encode())
 
+def seal_exchange(ent, data, nonce):
+    k=hkdf(hkdf(ent,'master'),'exchange')
+    h=MAGIC+bytes([3])
+    return h+nonce+AESGCM(k).encrypt(nonce, gzip.compress(data, mtime=0), h+b'wymiana')
+
 def safety(app,a,b):
     ka=base64.urlsafe_b64encode(a).decode(); kb=base64.urlsafe_b64encode(b).decode()
     s=sorted([ka,kb])
@@ -64,6 +69,8 @@ v={
  'share':seal_for(p1,pub1,pub2,app,'{"dni":[]}'.encode(),bytes(range(50,82)),bytes(range(20,32))).hex(),
  'sharePlain':'{"dni":[]}',
  'safety':safety(app,pub1,pub2),
+ 'exchange':seal_exchange(e1,'{"format":"wymiana-zdarzen"}'.encode(),bytes(range(40,52))).hex(),
+ 'exchangePlain':'{"format":"wymiana-zdarzen"}',
  'blobId':hmac.new(bk1,'załącznik'.encode(),hashlib.sha256).digest()[:16].hex(),
 }
 print(json.dumps(v, ensure_ascii=False, indent=1))

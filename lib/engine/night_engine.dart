@@ -329,7 +329,7 @@ class NightEngine extends ChangeNotifier {
         id: 900,
         at: plan.alarmAt!.add(const Duration(minutes: 1)),
         title: 'Pobudka! ⏰',
-        body: 'Budzik Nocnego Licznika — aplikacja została zamknięta w nocy.',
+        body: 'Budzik Rytmu Snu — aplikacja została zamknięta w nocy.',
       );
     }
     notifyListeners();

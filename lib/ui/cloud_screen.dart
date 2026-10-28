@@ -394,6 +394,10 @@ class _CloudScreenState extends State<CloudScreen> {
             ),
           ]),
         ),
+        if (Settings.instance.detectFarts) ...[
+          _head('Wymiana z moimi aplikacjami'),
+          const _ExchangeCard(),
+        ],
         _head('Podgląd snu'),
         ValueListenableBuilder<String?>(
           valueListenable: Cloud.lastError,
@@ -929,5 +933,77 @@ class _ConnectFormState extends State<_ConnectForm> {
         ),
       ),
     ]);
+  }
+}
+
+/// Wiatry do Kreski, Doby i Dziennika talerza przez Koofr (tylko przy włączonym liczeniu wiatrów).
+class _ExchangeCard extends StatefulWidget {
+  const _ExchangeCard();
+
+  @override
+  State<_ExchangeCard> createState() => _ExchangeCardState();
+}
+
+class _ExchangeCardState extends State<_ExchangeCard> {
+  bool? on;
+  bool busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    Cloud.exchangeOn().then((v) {
+      if (mounted) setState(() => on = v);
+    });
+  }
+
+  Future<void> _run() async {
+    setState(() => busy = true);
+    try {
+      await Cloud.exchangeNow(force: true);
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+    } finally {
+      if (mounted) setState(() => busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final v = on;
+    if (v == null) return const SizedBox(height: 48);
+    return Card(
+      child: Column(children: [
+        SwitchListTile(
+          secondary: const Icon(Icons.swap_horiz),
+          title: const Text('Udostępniaj wiatry moim aplikacjom'),
+          subtitle: const Text('Kreska, Doba i Dziennik talerza pobiorą je same przez Koofr, bez eksportu plików. '
+              'Widzą je tylko Twoje aplikacje (ten sam kod odzyskiwania).'),
+          value: v,
+          onChanged: (x) async {
+            await Cloud.setExchangeOn(x);
+            setState(() => on = x);
+            if (x) {
+              unawaited(_run());
+            } else {
+              try {
+                await Cloud.sync.removeExchange('rytm-snu');
+              } catch (_) {}
+            }
+          },
+        ),
+        if (v)
+          ValueListenableBuilder<String?>(
+            valueListenable: Cloud.lastExchangeMsg,
+            builder: (c, last, _) => ListTile(
+              leading: busy
+                  ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2))
+                  : const Icon(Icons.sync),
+              title: const Text('Wyślij teraz'),
+              subtitle: Text(last == null ? 'Automatycznie po każdej nocy i przy otwarciu aplikacji' : 'Ostatnio: $last'),
+              onTap: busy ? null : _run,
+            ),
+          ),
+      ]),
+    );
   }
 }

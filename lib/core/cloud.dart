@@ -12,6 +12,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../engine/night_engine.dart';
 import 'bus.dart';
 import 'db.dart';
+import 'exchange_export.dart';
 import 'models.dart';
 import 'settings.dart';
 
@@ -94,6 +95,9 @@ class Cloud {
     try {
       await init();
       if (!sync.ready || busy.value || NightEngine.instance.isActive) return;
+      if (afterNight || _lastExchange == null || DateTime.now().difference(_lastExchange!).inMinutes >= 15) {
+        await exchangeNow();
+      }
       final consents = await sync.myConsents();
       final wantBackup = await sync.backupDue();
       final wantPublish = consents.isNotEmpty &&
@@ -109,6 +113,31 @@ class Cloud {
     } finally {
       busy.value = false;
     }
+  }
+
+  // ------------------------------------------------------------ wymiana z moimi aplikacjami
+
+  static DateTime? _lastExchange;
+  static final lastExchangeMsg = ValueNotifier<String?>(null);
+
+  static Future<bool> exchangeOn() async => (await sync.store.read('ks.ex.on')) == '1';
+  static Future<void> setExchangeOn(bool v) => sync.store.write('ks.ex.on', v ? '1' : '0');
+
+  /// Wiatry trafiają do Kreski, Doby i Dziennika talerza tylko przy włączonym liczeniu wiatrów;
+  /// po wyłączeniu plik jest usuwany z Koofr.
+  static Future<String> exchangeNow({bool force = false}) async {
+    if (!sync.ready || !await exchangeOn()) return '';
+    String msg;
+    if (Settings.instance.detectFarts) {
+      final (bytes, _, farts) = await buildFartExchange();
+      msg = await sync.publishExchange('rytm-snu', bytes, force: force) ? 'wysłano wiatry ($farts)' : 'bez zmian';
+    } else {
+      await sync.removeExchange('rytm-snu');
+      msg = 'liczenie wiatrów wyłączone — nic nie jest udostępniane';
+    }
+    _lastExchange = DateTime.now();
+    lastExchangeMsg.value = msg;
+    return msg;
   }
 
   // ------------------------------------------------------------ kopia zapasowa
