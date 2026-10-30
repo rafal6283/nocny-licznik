@@ -91,6 +91,7 @@ class _BakometrAppState extends State<BakometrApp> {
       unawaited(WatchNight.backfillRecent());
       // kopia/podgląd Koofr — w tle, bez wpływu na start
       unawaited(Future.delayed(const Duration(seconds: 5), Cloud.autoRun));
+      unawaited(Cloud.init().then((_) => Cloud.startBackground()));
       setState(() => ready = true);
     } catch (_) {
       setState(() => step = 'Start nie powiódł się');

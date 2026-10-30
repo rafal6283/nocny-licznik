@@ -10,5 +10,6 @@ library;
 
 export 'package:koofr_sync/koofr_sync.dart';
 
+export 'src/background.dart';
 export 'src/backup.dart';
 export 'src/screen.dart';

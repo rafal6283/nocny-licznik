@@ -8,6 +8,8 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:koofr_sync/koofr_sync.dart';
 
+import 'background.dart';
+
 /// Hasło i klucze w Keystore (Android) / Pęku kluczy (iOS).
 class SecureStore implements KsStore {
   static const _s = FlutterSecureStorage();
@@ -115,7 +117,8 @@ class KoofrBackup {
   bool _exchanging = false;
 
   /// Publikuje i pobiera dane wymiany; zwraca opis wyniku.
-  Future<String> exchangeNow({bool force = false}) async {
+  /// [pull] = false: tylko wysyłka (w tle nie zmieniamy danych aplikacji, bo może być otwarta).
+  Future<String> exchangeNow({bool force = false, bool pull = true}) async {
     final ex = adapter.exchange;
     if (ex == null || !sync.ready || !await exchangeOn() || _exchanging) return '';
     _exchanging = true;
@@ -132,7 +135,7 @@ class KoofrBackup {
         }
       }
       final on = {for (final s in ex.sources) s.$1: await sourceOn(s.$1)};
-      final got = ex.sources.isEmpty
+      final got = ex.sources.isEmpty || !pull
           ? const <String>[]
           : await sync.pullExchange(
               (n) => on.entries.any((s) => s.value && (n == s.key || n.startsWith('${s.key}-'))), ex.import,
@@ -150,7 +153,10 @@ class KoofrBackup {
   }
 
   Future<bool> wifiOnly() async => (await sync.store.read('ks.wifiOnly')) != '0';
-  Future<void> setWifiOnly(bool v) => sync.store.write('ks.wifiOnly', v ? '1' : '0');
+  Future<void> setWifiOnly(bool v) async {
+    await sync.store.write('ks.wifiOnly', v ? '1' : '0');
+    await KoofrBackground.refresh();
+  }
 
   Future<bool> _onWifi() async {
     try {
@@ -162,13 +168,14 @@ class KoofrBackup {
   }
 
   /// Kopia raz na dobę, jeśli włączona (domyślnie tylko przez Wi-Fi). Błędy trafiają do [lastError].
-  Future<void> autoRun() async {
+  /// [background]: praca w tle (WorkManager) — tylko odczyt danych aplikacji: kopia i wysyłka.
+  Future<void> autoRun({bool background = false}) async {
     if (busy.value || adapter.busy) return;
     try {
       // wymiana: małe pliki, także bez Wi-Fi; co najmniej co 15 min
       final last = _lastExchangeRun;
       if (adapter.exchange != null && (last == null || DateTime.now().difference(last).inMinutes >= 15)) {
-        await exchangeNow();
+        await exchangeNow(pull: !background);
       }
       if (!await sync.backupDue()) return;
       if (await wifiOnly() && !await _onWifi()) return;

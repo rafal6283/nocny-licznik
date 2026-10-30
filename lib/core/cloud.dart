@@ -5,9 +5,11 @@ import 'dart:typed_data';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:koofr_sync/koofr_sync.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:workmanager/workmanager.dart';
 
 import '../engine/night_engine.dart';
 import 'bus.dart';
@@ -65,6 +67,34 @@ class Cloud {
 
   static bool _loaded = false;
 
+  /// Praca w tle (WorkManager, osobny proces Darta) — tylko odczyt danych.
+  static bool _background = false;
+
+  /// Czy trwa nagrywanie nocy. W tle silnik nocy nie działa w tym procesie,
+  /// więc patrzymy na niezakończoną noc w bazie.
+  static Future<bool> _nightActive() async =>
+      _background ? (await Db.instance.unfinishedNights()).isNotEmpty : NightEngine.instance.isActive;
+
+  static const _bgTask = 'rytm-snu-koofr';
+
+  /// Rejestracja pracy w tle (Android) co 3 h; warunek sieci zależy od „tylko Wi-Fi”.
+  static Future<void> startBackground() async {
+    if (!Platform.isAndroid) return;
+    try {
+      await Workmanager().initialize(rytmSnuBackground);
+      final wifi = await wifiOnly();
+      final cfg = 'v1/${wifi ? 'wifi' : 'any'}';
+      final p = await SharedPreferences.getInstance();
+      if (p.getString('koofrBgCfg') case final prev? when prev != cfg) await Workmanager().cancelByUniqueName(_bgTask);
+      await Workmanager().registerPeriodicTask(_bgTask, _bgTask,
+          frequency: const Duration(hours: 3),
+          constraints: Constraints(networkType: wifi ? NetworkType.unmetered : NetworkType.connected));
+      await p.setString('koofrBgCfg', cfg);
+    } catch (e) {
+      debugPrint('Koofr w tle: $e');
+    }
+  }
+
   static Future<void> init() async {
     if (_loaded) return;
     await sync.load();
@@ -75,7 +105,10 @@ class Cloud {
 
   static const _wifiKey = 'koofrWifiOnly';
   static Future<bool> wifiOnly() async => (await SharedPreferences.getInstance()).getBool(_wifiKey) ?? true;
-  static Future<void> setWifiOnly(bool v) async => (await SharedPreferences.getInstance()).setBool(_wifiKey, v);
+  static Future<void> setWifiOnly(bool v) async {
+    await (await SharedPreferences.getInstance()).setBool(_wifiKey, v);
+    await startBackground();
+  }
 
   static Future<bool> _onWifi() async {
     try {
@@ -94,7 +127,7 @@ class Cloud {
   static Future<void> autoRun({bool afterNight = false}) async {
     try {
       await init();
-      if (!sync.ready || busy.value || NightEngine.instance.isActive) return;
+      if (!sync.ready || busy.value || await _nightActive()) return;
       if (afterNight || _lastExchange == null || DateTime.now().difference(_lastExchange!).inMinutes >= 15) {
         await exchangeNow();
       }
@@ -144,7 +177,7 @@ class Cloud {
 
   /// Kontener kopii: [4 bajty długości nagłówka][nagłówek JSON][plik bazy SQLite].
   static Future<BackupInfo> backupNow() async {
-    if (NightEngine.instance.isActive) throw KoofrException('Kopię można zrobić, gdy noc nie jest nagrywana.');
+    if (await _nightActive()) throw KoofrException('Kopię można zrobić, gdy noc nie jest nagrywana.');
     final header = utf8.encode(jsonEncode({
       'format': 'rytm-snu-kopia',
       'version': 1,
@@ -361,4 +394,20 @@ class SharedNight {
         ),
     ];
   }
+}
+
+/// Zadanie w tle (WorkManager): kopia, wysyłka FF i podglądu snu — bez otwierania aplikacji.
+@pragma('vm:entry-point')
+void rytmSnuBackground() {
+  Workmanager().executeTask((name, input) async {
+    try {
+      WidgetsFlutterBinding.ensureInitialized();
+      await Settings.instance.load();
+      Cloud._background = true;
+      await Cloud.autoRun();
+    } catch (e) {
+      debugPrint('Koofr w tle: $e');
+    }
+    return true;
+  });
 }

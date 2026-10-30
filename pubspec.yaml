@@ -1,7 +1,7 @@
 name: bakometr
 description: "Rytm Snu — rejestracja i analiza snu: fazy, chrapanie, bezdech, CPAP, sonar, pogoda; opcjonalnie liczenie wiatrów."
 publish_to: 'none'
-version: 2.10.0+12
+version: 2.11.0+13
 
 environment:
   sdk: ">=3.6.0 <4.0.0"
@@ -21,6 +21,7 @@ dependencies:
   file_picker: ^13.1.0
   flutter_secure_storage: any
   connectivity_plus: any
+  workmanager: any
   bakometr_native:
     path: packages/bakometr_native
   koofr_sync:

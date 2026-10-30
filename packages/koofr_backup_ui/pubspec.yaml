@@ -16,3 +16,4 @@ dependencies:
       path: packages/koofr_sync
   flutter_secure_storage: any
   connectivity_plus: any
+  workmanager: any
