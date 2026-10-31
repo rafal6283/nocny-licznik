@@ -55,11 +55,36 @@ class KoofrBackground {
     await kb.sync.store.write('ks.bg.cfg', cfg);
   }
 
+  /// Dodatkowe zadanie okresowe aplikacji (np. alerty cenowe); obsługa w `dispatch(other:)`.
+  /// Wywołać po [start].
+  static Future<void> registerPeriodic(String name, Duration frequency, {bool network = true}) async {
+    if (!Platform.isAndroid || _callback == null) return;
+    try {
+      await Workmanager().registerPeriodicTask(name, name,
+          frequency: frequency,
+          constraints: Constraints(networkType: network ? NetworkType.connected : NetworkType.notRequired));
+    } catch (e) {
+      debugPrint('KoofrBackground: $e');
+    }
+  }
+
+  static Future<void> cancelPeriodic(String name) async {
+    if (!Platform.isAndroid || _callback == null) return;
+    try {
+      await Workmanager().cancelByUniqueName(name);
+    } catch (_) {}
+  }
+
   /// Treść zadania — wywołać z funkcji `@pragma('vm:entry-point')` aplikacji.
-  static void dispatch(Future<BackupAdapter> Function() prepare) {
+  /// [other] obsługuje zadania zarejestrowane przez [registerPeriodic].
+  static void dispatch(Future<BackupAdapter> Function() prepare, {Future<void> Function(String name)? other}) {
     Workmanager().executeTask((name, input) async {
       try {
         WidgetsFlutterBinding.ensureInitialized();
+        if (name != task) {
+          await other?.call(name);
+          return true;
+        }
         final adapter = await prepare();
         final b = await KoofrBackup.setup(adapter, autoRun: false);
         await b.autoRun(background: true);
