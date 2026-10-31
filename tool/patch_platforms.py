@@ -136,8 +136,11 @@ def patch_ios():
     pl["NSCameraUsageDescription"] = (
         "iPhone nie udostępnia czujnika światła, więc Rytm Snu na chwilę włącza przednią kamerę, "
         "żeby oszacować jasność w sypialni. Żadne zdjęcia nie są zapisywane.")
+    pl["NSBluetoothAlwaysUsageDescription"] = (
+        "Rytm Snu łączy się z opaską na klatkę piersiową (np. Polar H10), żeby zapisać tętno i rytm serca w nocy.")
     modes = set(pl.get("UIBackgroundModes", []))
     modes.add("audio")
+    modes.add("bluetooth-central")
     pl["UIBackgroundModes"] = sorted(modes)
     with open(plist_path, "wb") as f:
         plistlib.dump(pl, f)

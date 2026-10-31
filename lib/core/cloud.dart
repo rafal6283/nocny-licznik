@@ -15,6 +15,7 @@ import '../engine/night_engine.dart';
 import 'bus.dart';
 import 'db.dart';
 import 'exchange_export.dart';
+import 'strap.dart';
 import 'models.dart';
 import 'settings.dart';
 
@@ -157,7 +158,7 @@ class Cloud {
   static Future<void> setExchangeOn(bool v) => sync.store.write('ks.ex.on', v ? '1' : '0');
 
   /// Wiatry trafiają do Kreski, Doby i Dziennika talerza tylko przy włączonym liczeniu wiatrów;
-  /// po wyłączeniu plik jest usuwany z Koofr.
+  /// po wyłączeniu plik jest usuwany z Koofr. Podsumowanie snu (czynniki-sen) idzie do Polar EKG.
   static Future<String> exchangeNow({bool force = false}) async {
     if (!sync.ready || !await exchangeOn()) return '';
     String msg;
@@ -166,8 +167,20 @@ class Cloud {
       msg = await sync.publishExchange('rytm-snu', bytes, force: force) ? 'wysłano FF ($farts)' : 'bez zmian';
     } else {
       await sync.removeExchange('rytm-snu');
-      msg = 'licznik FF wyłączony — nic nie jest udostępniane';
+      msg = 'licznik FF wyłączony';
     }
+    // napady AF z Polar EKG – na wykres nocy (tętno i rytm)
+    try {
+      final got = await sync.pullExchange((n) => n == 'polar-ekg', (name, data) => PolarAf.save(data), force: force);
+      if (got.isNotEmpty) {
+        msg = '$msg · pobrano AF z Polar EKG';
+        dataChanged();
+      }
+    } catch (_) {}
+    // sen dla Polar EKG (co poprzedza napady AF) – bez wiatrów
+    try {
+      if (await sync.publishExchange('czynniki-sen', await buildSleepFactors(), force: force)) msg = '$msg · wysłano sen';
+    } catch (_) {}
     _lastExchange = DateTime.now();
     lastExchangeMsg.value = msg;
     return msg;

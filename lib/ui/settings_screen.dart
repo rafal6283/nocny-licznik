@@ -23,6 +23,7 @@ import 'accuracy_screen.dart';
 import 'diagnostics_screen.dart';
 import 'placement_check_screen.dart';
 import 'sonar_test_screen.dart';
+import 'strap_picker.dart';
 import 'theme.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -300,6 +301,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _snack('Gotowe. Dane z zegarka zobaczysz w szczegółach każdej nocy');
   }
 
+  Future<void> _pickStrap() async {
+    final picked = await showDialog<(String, String)>(context: context, builder: (_) => const StrapPicker());
+    if (picked == null) return;
+    setState(() {
+      s.strapId = picked.$1;
+      s.strapName = picked.$2;
+      s.strapOn = true;
+    });
+    _snack('Opaska zapisana. Załóż ją przed snem – Rytm Snu połączy się po rozpoczęciu nocy');
+  }
+
   Future<void> _pushAll() async {
     final n = await HealthSync.pushAll();
     _snack(n < 0 ? 'Nie udało się zapisać nocy w Health Connect' : 'Zapisano w Health Connect nocy: $n');
@@ -569,6 +581,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 onChanged: _setWatchData,
               ),
             ],
+            SwitchListTile(
+              secondary: const Icon(Icons.monitor_heart_outlined),
+              title: const Text('Opaska na klatkę piersiową'),
+              subtitle: Text(s.strapId.isEmpty
+                  ? 'Polar H10 albo inny pulsometr Bluetooth: tętno, pauzy, pobudzenia dodatkowe i nieregularny rytm na wykresie nocy'
+                  : '${s.strapName.isEmpty ? s.strapId : s.strapName} · łączy się sama na czas nocy (obok Polar EKG)'),
+              value: s.strapOn && s.strapId.isNotEmpty,
+              onChanged: (v) async {
+                if (v && s.strapId.isEmpty) {
+                  await _pickStrap();
+                  if (s.strapId.isEmpty) return;
+                }
+                setState(() => s.strapOn = v);
+              },
+            ),
+            if (s.strapId.isNotEmpty)
+              ListTile(
+                contentPadding: const EdgeInsets.only(left: 72, right: 16),
+                title: const Text('Zmień opaskę'),
+                trailing: const Icon(Icons.bluetooth_searching),
+                onTap: _pickStrap,
+              ),
             const ListTile(
               leading: Icon(Icons.lock_outline),
               title: Text('Prywatność'),
@@ -625,7 +659,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
         ),
         const SizedBox(height: 16),
-        const Center(child: Text('Rytm Snu 2.14', style: TextStyle(color: C.muted, fontSize: 12))),
+        const Center(child: Text('Rytm Snu 2.15', style: TextStyle(color: C.muted, fontSize: 12))),
       ],
     );
   }

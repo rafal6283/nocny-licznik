@@ -11,11 +11,13 @@ import '../core/models.dart';
 import '../core/night_log.dart';
 import '../core/settings.dart';
 import '../core/stats_util.dart';
+import '../core/strap.dart';
 import '../core/watch_data.dart';
 import '../core/weather.dart';
 import '../engine/night_engine.dart';
 import 'charts.dart';
 import 'clip_player.dart';
+import 'strap_card.dart';
 import 'theme.dart';
 
 class NightDetailScreen extends StatefulWidget {
@@ -39,6 +41,7 @@ class _NightDetailScreenState extends State<NightDetailScreen> {
   final noteCtl = TextEditingController();
   Timer? _noteDebounce;
   WatchNight? watch;
+  List<(DateTime, DateTime)> polarAf = [];
   bool watchLoading = false;
 
   @override
@@ -63,8 +66,10 @@ class _NightDetailScreenState extends State<NightDetailScreen> {
     final m = await Db.instance.minutes(widget.nightId);
     final e = await Db.instance.events(widget.nightId);
     final x = await Db.instance.ext(widget.nightId);
+    final paf = await PolarAf.load();
     if (!mounted) return;
     setState(() {
+      polarAf = paf;
       n = night;
       ms = m;
       evs = e;
@@ -826,6 +831,12 @@ class _NightDetailScreenState extends State<NightDetailScreen> {
               Text(_sourceNote(night.stageSource), style: const TextStyle(fontSize: 11, color: C.muted)),
             ]),
           ),
+          if (Settings.instance.strapOn ||
+              ext.any((r) => r.$2.startsWith('h10')) ||
+              polarAf.any((a) => a.$1.isBefore(end) && a.$2.isAfter(night.start))) ...[
+            const SizedBox(height: 12),
+            StrapCard(night: night, minutes: ms, ext: ext, polarAf: polarAf),
+          ],
           const SizedBox(height: 12),
           if (night.cpap) ...[
             _cpapCard(night),

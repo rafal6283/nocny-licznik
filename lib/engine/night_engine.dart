@@ -20,6 +20,7 @@ import '../core/weather.dart';
 import '../core/models.dart';
 import '../core/night_log.dart';
 import '../core/settings.dart';
+import '../core/strap.dart';
 import 'classifier.dart';
 import 'accel_breath.dart';
 import 'sleep_analysis.dart';
@@ -235,6 +236,7 @@ class NightEngine extends ChangeNotifier {
 
     state = NightState.tracking;
     notifyListeners();
+    unawaited(Strap.instance.start(night!.id!));
 
     final fgsError = await BakometrNative.startTracking(title: 'Rytm Snu nasłuchuje', text: 'Dobranoc 🌙');
     final dev = await BakometrNative.deviceInfo();
@@ -923,6 +925,7 @@ class NightEngine extends ChangeNotifier {
     }
     if (_minNoiseN > 0) await _flushMinute();
 
+    await Strap.instance.stop();
     await BakometrNative.cancelNotification(900);
     await BakometrNative.stopTracking();
     await BakometrNative.setKeepScreenOn(false);
@@ -931,6 +934,7 @@ class NightEngine extends ChangeNotifier {
     n.end = DateTime.now();
     n.micBlockedMin = _blockedHops ~/ 120;
     await summarize(n, minutes, liveEvents);
+    unawaited(Strap.applyToNight(n).catchError((_) => null));
     unawaited(WeatherService.fetchFor(n).then((ok) {
       if (ok) dataChanged();
     }));
@@ -1020,6 +1024,9 @@ class NightEngine extends ChangeNotifier {
               '(zwykle oszczędzanie baterii albo wyczyszczenie z ostatnich aplikacji)';
       await NightLog.add(n.id, 'PRZERWANA: ${n.interruptReason}');
       await summarize(n, ms, evs);
+      try {
+        await Strap.applyToNight(n);
+      } catch (_) {}
     }
   }
 

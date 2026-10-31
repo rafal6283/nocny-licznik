@@ -64,3 +64,40 @@ Future<ExchangeExport> exportFartExchange() async {
   await out.writeAsBytes(bytes);
   return ExchangeExport(out, nights, farts);
 }
+
+/// Sen jako „czynniki-dnia” v1 – dla Polar EKG (co poprzedza napady AF). Noc przypisana do dnia pobudki.
+///
+/// {"format": "czynniki-dnia", "version": 1, "source": "rytm-snu", "exported_at": ms,
+///  "days": [{"date": "RRRR-MM-DD", "sleep_min": 412, "score": 78, "awakenings": 3,
+///            "apnea_idx": 4.2, "snore_min": 12, "hr_avg": 58.1, "bed_h": 23.5}]}
+Future<List<int>> buildSleepFactors() async {
+  final nights = await Db.instance.nights();
+  final byDay = <String, Map<String, Object?>>{};
+  String iso(DateTime d) => '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+  for (final n in nights) {
+    final end = n.end;
+    if (end == null || n.durationMin < 60) continue;
+    final day = iso(end);
+    final prev = byDay[day];
+    if (prev != null && (prev['sleep_min'] as int) >= n.durationMin) continue; // drzemka obok nocy – liczy się dłuższy sen
+    final s = n.start;
+    byDay[day] = {
+      'date': day,
+      'sleep_min': n.durationMin,
+      'score': n.score,
+      'awakenings': n.awakenings,
+      'apnea_idx': double.parse(n.apneaIndex.toStringAsFixed(1)),
+      'snore_min': n.snoreMin,
+      if (n.hrAvg != null) 'hr_avg': double.parse(n.hrAvg!.toStringAsFixed(1)),
+      'bed_h': double.parse((s.hour + s.minute / 60).toStringAsFixed(2)),
+    };
+  }
+  final days = byDay.values.toList()..sort((a, b) => (a['date'] as String).compareTo(b['date'] as String));
+  return utf8.encode(jsonEncode({
+    'format': 'czynniki-dnia',
+    'version': 1,
+    'source': 'rytm-snu',
+    'exported_at': DateTime.now().millisecondsSinceEpoch,
+    'days': days,
+  }));
+}

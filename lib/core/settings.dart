@@ -148,6 +148,14 @@ class Settings extends ChangeNotifier {
   set healthConnect(bool v) => _set('healthConnect', v);
 
   /// Odczyt tętna, SpO₂ i faz snu z zegarka przez Health Connect (np. Huawei przez Health Sync).
+  // --- Opaska na klatkę piersiową (BLE, np. Polar H10) ---
+  bool get strapOn => _b('strapOn', false);
+  set strapOn(bool v) => _set('strapOn', v);
+  String get strapId => _s('strapId', '');
+  set strapId(String v) => _set('strapId', v);
+  String get strapName => _s('strapName', '');
+  set strapName(String v) => _set('strapName', v);
+
   bool get watchData => _b('watchData', false);
   set watchData(bool v) => _set('watchData', v);
 

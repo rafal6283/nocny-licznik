@@ -975,9 +975,10 @@ class _ExchangeCardState extends State<_ExchangeCard> {
       child: Column(children: [
         SwitchListTile(
           secondary: const Icon(Icons.swap_horiz),
-          title: const Text('Udostępniaj FF moim aplikacjom'),
-          subtitle: const Text('Kreska, Doba i Dziennik talerza pobiorą je same przez Koofr, bez eksportu plików. '
-              'Widzą je tylko Twoje aplikacje (ten sam kod odzyskiwania).'),
+          title: const Text('Wymiana z moimi aplikacjami'),
+          subtitle: Text('${Settings.instance.detectFarts ? 'FF → Kreska, Doba i Dziennik talerza. ' : ''}'
+              'Podsumowanie snu → Polar EKG (co poprzedza napady AF). Aplikacje pobiorą dane same przez Koofr, '
+              'widzą je tylko Twoje aplikacje (ten sam kod odzyskiwania).'),
           value: v,
           onChanged: (x) async {
             await Cloud.setExchangeOn(x);
@@ -987,6 +988,7 @@ class _ExchangeCardState extends State<_ExchangeCard> {
             } else {
               try {
                 await Cloud.sync.removeExchange('rytm-snu');
+                await Cloud.sync.removeExchange('czynniki-sen');
               } catch (_) {}
             }
           },
