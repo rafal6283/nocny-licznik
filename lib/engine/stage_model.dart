@@ -11,7 +11,10 @@ class MinuteFeat {
   final bool? irregular; // oddech z sonaru nieregularny
   final int? hrBin; // tętno względem mediany nocy: 0 niższe, 1 typowe, 2 wyższe
   final int? rateBin; // tempo oddechu względem mediany nocy
-  const MinuteFeat(this.cat, this.snore, this.sound, this.irregular, this.hrBin, this.rateBin);
+  final int screen; // 0 brak, 1 ekran się włączył, 2 odblokowanie
+  final bool? rustle; // szelest pościeli (null = nieużywane)
+  const MinuteFeat(this.cat, this.snore, this.sound, this.irregular, this.hrBin, this.rateBin,
+      {this.screen = 0, this.rustle});
 }
 
 /// Prawdopodobieństwa cech w każdej fazie (kolejność faz = Stage.values: wake, rem, light, deep).
@@ -20,10 +23,20 @@ class StageModel {
   final List<List<double>> em; // 4×7: P(kategoria ruchu | faza)
   final List<double> pSnore, pSound, pIrregular; // 4
   final List<List<double>> pRate, pHr; // 4×3
+  final List<List<double>> pScreen; // 4×3: brak / ekran / odblokowanie
+  final List<double> pRustle; // 4
   final int nights; // z ilu nocy z zegarkiem się nauczył (0 = domyślny)
   final int minutes;
   const StageModel(this.em, this.pSnore, this.pSound, this.pIrregular, this.pRate, this.pHr,
-      {this.nights = 0, this.minutes = 0});
+      {this.pScreen = _defScreen, this.pRustle = _defRustle, this.nights = 0, this.minutes = 0});
+
+  static const _defScreen = [
+    [0.86, 0.08, 0.06],
+    [0.985, 0.013, 0.002],
+    [0.985, 0.013, 0.002],
+    [0.99, 0.0095, 0.0005],
+  ];
+  static const _defRustle = [0.35, 0.12, 0.10, 0.03];
 
   static const defaults = StageModel(
     [
@@ -62,6 +75,8 @@ class StageModel {
         'irr': pIrregular,
         'rate': pRate,
         'hr': pHr,
+        'screen': pScreen,
+        'rustle': pRustle,
         'nights': nights,
         'minutes': minutes,
       };
@@ -73,6 +88,8 @@ class StageModel {
       List<double> v(Object? x) => [for (final e in x as List) (e as num).toDouble()];
       List<List<double>> mx(Object? x) => [for (final r in x as List) v(r)];
       final out = StageModel(mx(m['em']), v(m['snore']), v(m['sound']), v(m['irr']), mx(m['rate']), mx(m['hr']),
+          pScreen: m['screen'] != null ? mx(m['screen']) : _defScreen,
+          pRustle: m['rustle'] != null ? v(m['rustle']) : _defRustle,
           nights: (m['nights'] as num?)?.toInt() ?? 0, minutes: (m['minutes'] as num?)?.toInt() ?? 0);
       if (out.em.length != 4 || out.em.any((r) => r.length != 7)) return null;
       return out;
@@ -90,6 +107,8 @@ class StageCounts {
   final irr = List.generate(4, (_) => List<double>.filled(2, 0));
   final rate = List.generate(4, (_) => List<double>.filled(3, 0));
   final hr = List.generate(4, (_) => List<double>.filled(3, 0));
+  final screen = List.generate(4, (_) => List<double>.filled(3, 0));
+  final rustle = List.generate(4, (_) => List<double>.filled(2, 0));
   int nights = 0;
   int minutes = 0;
 
@@ -100,6 +119,8 @@ class StageCounts {
     if (f.irregular != null) irr[k][f.irregular! ? 1 : 0]++;
     if (f.rateBin != null) rate[k][f.rateBin!]++;
     if (f.hrBin != null) hr[k][f.hrBin!]++;
+    screen[k][f.screen]++;
+    if (f.rustle != null) rustle[k][f.rustle! ? 1 : 0]++;
     minutes++;
   }
 
@@ -118,6 +139,8 @@ class StageCounts {
     _acc(irr, o.irr, sign);
     _acc(rate, o.rate, sign);
     _acc(hr, o.hr, sign);
+    _acc(screen, o.screen, sign);
+    _acc(rustle, o.rustle, sign);
     nights += sign > 0 ? o.nights : -o.nights;
     minutes += sign > 0 ? o.minutes : -o.minutes;
   }
@@ -143,6 +166,8 @@ class StageCounts {
       bin(prior.pIrregular, irr),
       [for (var k = 0; k < 4; k++) row(prior.pRate[k], rate[k])],
       [for (var k = 0; k < 4; k++) row(prior.pHr[k], hr[k])],
+      pScreen: [for (var k = 0; k < 4; k++) row(prior.pScreen[k], screen[k])],
+      pRustle: bin(prior.pRustle, rustle),
       nights: nights,
       minutes: minutes,
     );

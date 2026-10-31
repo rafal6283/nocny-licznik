@@ -9,6 +9,7 @@ import 'package:sensors_plus/sensors_plus.dart';
 
 import '../core/audio_synth.dart';
 import '../core/settings.dart';
+import '../engine/accel_breath.dart';
 import '../engine/night_engine.dart';
 import '../engine/sonar.dart';
 import 'theme.dart';
@@ -32,7 +33,7 @@ class _Result {
 }
 
 class _PlacementCheckScreenState extends State<PlacementCheckScreen> {
-  static const stillSec = 14, moveSec = 10;
+  static const stillSec = 40, moveSec = 10;
   final s = Settings.instance;
   _Phase phase = _Phase.idle;
   int sec = 0;
@@ -48,11 +49,15 @@ class _PlacementCheckScreenState extends State<PlacementCheckScreen> {
 
   // pomiary
   double? _ax, _ay, _az;
+  int _refMs = 0;
   double stillMotion = 0, moveMotion = 0;
   int stillJitter = 0, stillSamples = 0;
   double noiseSum = 0;
   int noiseN = 0;
   final List<double> sonarQ = [];
+  AccelProcessor _acc = AccelProcessor();
+  (double, double)? accBreath;
+  bool accBreathDone = false;
   List<_Result> results = [];
 
   bool get useSonar => s.sonarEnabled && NightEngine.instance.isActive == false;
@@ -75,10 +80,13 @@ class _PlacementCheckScreenState extends State<PlacementCheckScreen> {
       stillJitter = stillSamples = noiseN = 0;
       sonarQ.clear();
       _ax = null;
+      _acc = AccelProcessor();
+      accBreath = null;
+      accBreathDone = false;
       sec = 0;
       phase = _Phase.still;
     });
-    accSub = accelerometerEventStream(samplingPeriod: SensorInterval.normalInterval).listen(_onAccel);
+    accSub = accelerometerEventStream(samplingPeriod: SensorInterval.gameInterval).listen(_onAccel);
 
     rec = AudioRecorder();
     if (await rec!.hasPermission()) {
@@ -120,7 +128,11 @@ class _PlacementCheckScreenState extends State<PlacementCheckScreen> {
     // ton sonaru po 5 s pomiaru ciszy
     if (useSonar && sec == 5 && !toneOn) unawaited(_tone());
     if (useSonar && toneOn && sec > 8 && phase == _Phase.still) sonarQ.add(sonar?.quality ?? -99);
-    if (sec == stillSec) phase = _Phase.move;
+    if (sec == stillSec) {
+      accBreath = _acc.breath(minFrames: 150);
+      accBreathDone = true;
+      phase = _Phase.move;
+    }
     if (sec >= stillSec + moveSec) {
       _finish();
       return;
@@ -139,6 +151,10 @@ class _PlacementCheckScreenState extends State<PlacementCheckScreen> {
   }
 
   void _onAccel(AccelerometerEvent e) {
+    if (phase == _Phase.still && sec >= 3) _acc.add(e.x, e.y, e.z, DateTime.now().millisecondsSinceEpoch);
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    if (_ax != null && nowMs - _refMs < 190) return; // porównujemy co ~200 ms, jak w nocy
+    _refMs = nowMs;
     if (_ax != null) {
       final d = sqrt(pow(e.x - _ax!, 2) + pow(e.y - _ay!, 2) + pow(e.z - _az!, 2));
       if (phase == _Phase.still && sec >= 2) {
@@ -190,6 +206,19 @@ class _PlacementCheckScreenState extends State<PlacementCheckScreen> {
       out.add(const _Result('Ruch słabo widoczny',
           'Telefon wyczuł niewiele. Przesuń go bliżej siebie (np. pod kołdrę przy poduszce, nie pod nią).',
           warn: true));
+    }
+    if (accBreathDone) {
+      final b = accBreath;
+      if (b != null) {
+        out.add(_Result('Telefon wyczuwa oddech (${b.$1.round()}/min)',
+            'Mikroruchy materaca od oddechu są widoczne — bez sonaru też będzie tempo i regularność oddechu, '
+                'co pomaga odróżnić sen głęboki od REM.',
+            ok: true));
+      } else {
+        out.add(const _Result('Oddechu nie widać w czujniku',
+            'Telefon nie wyczuwa oddechu przez materac (twardy materac, gruba kołdra, telefon za daleko). '
+                'Fazy snu nadal będą liczone z ruchów; bliżej klatki piersiowej lub z sonarem będzie dokładniej.'));
+      }
     }
     if (stillRate > 0.5) {
       out.add(const _Result('Telefon drży w spoczynku',
@@ -268,9 +297,9 @@ class _PlacementCheckScreenState extends State<PlacementCheckScreen> {
       _Phase.idle => (
           'Połóż telefon tak jak na noc',
           'Na materacu przy poduszce (albo na szafce, jeśli używasz sonaru). Połóż się, naciśnij „Start” i leż spokojnie. '
-              'Po kilkunastu sekundach poproszę Cię o ruch.'
+              'Po ok. 40 sekundach poproszę Cię o ruch.'
         ),
-      _Phase.still => ('Leż spokojnie…', 'Mierzę ciszę w sypialni${useSonar ? ' i sygnał sonaru' : ''}.'),
+      _Phase.still => ('Leż spokojnie…', 'Mierzę oddech przez materac, ciszę w sypialni${useSonar ? ' i sygnał sonaru' : ''}.'),
       _Phase.move => ('Teraz przewróć się na bok', 'Albo kilka razy porusz ramieniem i nogą — sprawdzam, czy telefon to czuje.'),
       _Phase.done => ('Wynik', 'Możesz powtórzyć test po przełożeniu telefonu.'),
     };

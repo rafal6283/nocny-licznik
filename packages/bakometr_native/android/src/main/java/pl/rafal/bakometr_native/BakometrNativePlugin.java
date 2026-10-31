@@ -88,6 +88,11 @@ public class BakometrNativePlugin implements FlutterPlugin, MethodChannel.Method
                 result.success(null);
                 break;
             }
+            case "screenEvents": {
+                Number since = call.argument("since");
+                result.success(ScreenEvents.since(since == null ? 0 : since.longValue()));
+                return;
+            }
             case "exitReasons":
                 result.success(exitReasons());
                 break;

@@ -25,7 +25,8 @@ Rejestracja i analiza snu na Android i iOS w stylu Sleep Cycle / Sleep as Androi
 - **Pogoda a sen** — dla każdej nocy temperatura, wilgotność, ciśnienie i jego zmiana w 24 h, wiatr, opady, zachmurzenie ([Open-Meteo](https://open-meteo.com), bez klucza; wysyłane są tylko współrzędne miejscowości) oraz faza Księżyca liczona lokalnie; porównanie nocy przy niskich i wysokich wartościach z korelacją do oceny, długości snu, zasypiania, przebudzeń i chrapania
 - **Health Connect** (Android) — każda noc z fazami snu zapisuje się w Health Connect, skąd czytają ją inne aplikacje (np. Life Cycle); włączasz w Ustawieniach → Dane. Odczyt z Health Connect: tętno (krzywa nocy, wpływ na fazy snu), SpO₂ i ODI — np. z zegarka Huawei przez aplikację Health Sync lub z Gadgetbridge
 - **Dokładność i kalibracja** — aplikacja uczy się na Twoich nocach: fazy snu dostrajane do faz z zegarka (model bayesowski, ocena z pominięciem ocenianej nocy), w noce z zegarkiem jego fazy łączone z danymi telefonu; bezdechy i chrapanie porównywane z kartą SD AirSense (czułość, trafność) i automatyczny dobór progów; progi pewności uczone z ocen nagrań ✓/✗; ekran zgodności (%, kappa)
-- **Test ustawienia telefonu** — 25 s przed snem: czy telefon czuje ruch materaca, poziom hałasu, jakość sygnału sonaru
+- **Test ustawienia telefonu** — 50 s przed snem: czy telefon czuje ruch materaca i oddech, poziom hałasu, jakość sygnału sonaru
+- **Sam telefon, dokładniej** — akcelerometr ~50 Hz: aktygrafia (sekundy z ruchem w minucie) i oddech z mikroruchów materaca (tempo, regularność → głęboki vs REM) bez sonaru; odblokowanie telefonu w nocy jako pewne czuwanie (Android); szelest pościeli z mikrofonu jako dodatkowy ślad ruchu; próg nieregularnego oddechu względem danej nocy
 - **Eksport do Kreski** — plik z wiatrami do porównania z ręcznymi wpisami FF
 - Dodatkowo: godzina szczytu wiatrów, rekordy, wpływ tagów, światło i hałas a sen
 

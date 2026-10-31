@@ -47,6 +47,7 @@ public class TrackingService extends Service {
             wakeLock.setReferenceCounted(false);
             wakeLock.acquire(14L * 60 * 60 * 1000); // maks. 14 h
         }
+        ScreenEvents.start(this);
         return START_STICKY;
     }
 
@@ -69,6 +70,7 @@ public class TrackingService extends Service {
 
     @Override
     public void onDestroy() {
+        ScreenEvents.stop(this);
         if (wakeLock != null && wakeLock.isHeld()) wakeLock.release();
         wakeLock = null;
         super.onDestroy();

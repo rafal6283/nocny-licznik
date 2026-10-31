@@ -27,7 +27,7 @@ class Db {
     final dir = await getDatabasesPath();
     return openDatabase(
       p.join(dir, 'bakometr.db'),
-      version: 8,
+      version: 9,
       onUpgrade: (db, from, to) async {
         if (from < 2) {
           await db.execute('ALTER TABLE nights ADD COLUMN apnea_count INTEGER');
@@ -75,6 +75,12 @@ class Db {
           }
           await db.execute('ALTER TABLE minutes ADD COLUMN hr REAL');
           await _createExt(db);
+        }
+        if (from < 9) {
+          // telefon: sekundy z ruchem (aktygrafia), ekran/odblokowanie, szelesty
+          await db.execute('ALTER TABLE minutes ADD COLUMN active_sec INTEGER');
+          await db.execute('ALTER TABLE minutes ADD COLUMN screen INTEGER');
+          await db.execute('ALTER TABLE minutes ADD COLUMN rustle INTEGER');
         }
         if (from < 7) {
           await db.execute('ALTER TABLE nights ADD COLUMN stage_source TEXT');
@@ -170,6 +176,9 @@ class Db {
             snore INTEGER,
             apneas INTEGER,
             sounds INTEGER,
+            active_sec INTEGER,
+            screen INTEGER,
+            rustle INTEGER,
             stage INTEGER,
             PRIMARY KEY(night_id, idx)
           )''');

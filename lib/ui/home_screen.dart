@@ -348,7 +348,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           child: TextButton.icon(
             onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PlacementCheckScreen())),
             icon: const Icon(Icons.phone_android, size: 18),
-            label: const Text('Sprawdź ustawienie telefonu (25 s)'),
+            label: const Text('Sprawdź ustawienie telefonu (50 s)'),
           ),
         ),
         const SizedBox(height: 20),

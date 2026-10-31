@@ -249,7 +249,10 @@ class SleepAnalysis {
       return MovementSignal(v, thr, source);
     }
 
-    final accel = tryValues([for (final m in ms) m.motion], 'ruch');
+    // Aktygrafia (sekundy z ruchem w minucie) — gdy noc ją ma; odporna na pojedyncze mocne szarpnięcia.
+    final hasActive = ms.where((m) => m.activeSec != null).length >= 0.8 * n;
+    final accel = tryValues(
+        [for (final m in ms) hasActive ? (m.activeSec ?? 0).toDouble() : m.motion], 'ruch');
     final son = ms.any((m) => m.sonarMotion != null)
         ? tryValues([for (final m in ms) m.sonarMotion ?? 0], 'sonar')
         : null;
@@ -275,6 +278,7 @@ class SleepAnalysis {
     final snd = [
       for (final m in ms)
         (m.sounds > 0 ? 3.0 : 0.0) +
+            (m.rustle >= 2 ? 2.0 : 0.0) +
             ((m.noiseMax != null && m.noiseDb > -120 && m.noiseMax! - m.noiseDb >= 12) ? (m.noiseMax! - m.noiseDb) / 12 : 0.0)
     ];
     return tryValues(snd, 'dźwięk');
@@ -348,6 +352,9 @@ class SleepAnalysis {
 
     final rates = [for (final m in ms) if (m.breathRate != null) m.breathRate!]..sort();
     final medRate = rates.length >= 30 ? rates[rates.length ~/ 2] : null;
+    // Nieregularny oddech względem typowej minuty tej nocy (sonar i akcelerometr mają różne skale).
+    final bvs = [for (final m in ms) if (m.breathVar != null) m.breathVar!]..sort();
+    final irrThr = bvs.length >= 30 ? max(0.12, 1.6 * bvs[bvs.length ~/ 2]) : 0.25;
     final hrs = [for (final m in ms) if (m.hr != null) m.hr!]..sort();
     final medHr = hrs.length >= 60 ? hrs[hrs.length ~/ 2] : null;
     int b3(double rel) => rel < 0.95 ? 0 : (rel > 1.05 ? 2 : 1);
@@ -367,9 +374,11 @@ class SleepAnalysis {
           cat(i),
           ms[i].snore,
           mv.source != 'dźwięk' ? ms[i].sounds > 0 : null,
-          ms[i].breathVar == null ? null : ms[i].breathVar! > 0.25,
+          ms[i].breathVar == null ? null : ms[i].breathVar! > irrThr,
           (ms[i].hr != null && medHr != null) ? b3(ms[i].hr! / medHr) : null,
           (ms[i].breathRate != null && medRate != null) ? b3(ms[i].breathRate! / medRate) : null,
+          screen: ms[i].screen.clamp(0, 2),
+          rustle: mv.source != 'dźwięk' ? (ms[i].rustle >= 2 && !ms[i].snore) : null,
         )
     ];
     return (feats, onset0);
@@ -395,6 +404,8 @@ class SleepAnalysis {
         if (f.irregular != null) e += log(f.irregular! ? md.pIrregular[k] : 1 - md.pIrregular[k]);
         if (f.hrBin != null) e += log(md.pHr[k][f.hrBin!]);
         if (f.rateBin != null) e += log(md.pRate[k][f.rateBin!]);
+        e += log(md.pScreen[k][f.screen]);
+        if (f.rustle != null) e += log(f.rustle! ? md.pRustle[k] : 1 - md.pRustle[k]);
         if (w != null) e += log(w == k ? _watchTrust : (1 - _watchTrust) / 3);
         out[k] = e;
       }

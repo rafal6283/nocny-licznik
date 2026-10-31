@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/services.dart';
 
 /// Cienka warstwa nad natywnym kodem Androida (Java) i iOS (Swift).
@@ -174,6 +176,21 @@ class BakometrNative {
 
   /// Android: wybór karty SD aparatu ResMed; kopiuje STR.edf i *_EVE/*_PLD.edf z dni [from, to]
   /// (RRRRMMDD) do pamięci podręcznej. Zwraca ścieżki albo null (anulowano).
+  /// Włączenia ekranu (1), wyłączenia (0) i odblokowania (2) od [since] — tylko Android, w czasie nocy.
+  static Future<List<(DateTime, int)>> screenEvents(DateTime since) async {
+    if (!Platform.isAndroid) return const [];
+    try {
+      final r = await _ch.invokeMethod<List<dynamic>>('screenEvents', {'since': since.millisecondsSinceEpoch});
+      return [
+        for (final e in r ?? const [])
+          if (e is List && e.length >= 2)
+            (DateTime.fromMillisecondsSinceEpoch((e[0] as num).toInt()), (e[1] as num).toInt())
+      ];
+    } catch (_) {
+      return const [];
+    }
+  }
+
   static Future<List<String>?> pickCpapCard({required String from, required String to}) async {
     final r = await _ch.invokeMethod<List<dynamic>>('pickCpapCard', {'from': from, 'to': to});
     return r?.map((e) => e.toString()).toList();

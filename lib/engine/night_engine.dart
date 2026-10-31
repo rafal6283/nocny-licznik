@@ -21,6 +21,7 @@ import '../core/models.dart';
 import '../core/night_log.dart';
 import '../core/settings.dart';
 import 'classifier.dart';
+import 'accel_breath.dart';
 import 'sleep_analysis.dart';
 import 'stage_model.dart';
 import 'sonar.dart';
@@ -166,6 +167,9 @@ class NightEngine extends ChangeNotifier {
   // Ruch
   StreamSubscription<AccelerometerEvent>? _accSub;
   double? _ax, _ay, _az;
+  AccelProcessor _acc = AccelProcessor();
+  int _minRustle = 0;
+  DateTime _lastFlush = DateTime.now();
   int _shakes = 0;
   DateTime _lastShake = DateTime.fromMillisecondsSinceEpoch(0);
   void Function(int)? onShake;
@@ -304,7 +308,7 @@ class NightEngine extends ChangeNotifier {
       lastError = 'Nie udało się uruchomić mikrofonu: $e';
     }
 
-    _accSub = accelerometerEventStream(samplingPeriod: SensorInterval.normalInterval).listen(_onAccel);
+    _accSub = accelerometerEventStream(samplingPeriod: SensorInterval.gameInterval).listen(_onAccel);
 
     // Analiza dźwięku rusza po opóźnieniu i po kołysance (żeby jej nie „słyszeć”).
     final delay = max(plan.delayMin, plan.lullaby != 'none' ? plan.lullabyMin : 0);
@@ -338,6 +342,9 @@ class NightEngine extends ChangeNotifier {
   }
 
   void _reset() {
+    _acc = AccelProcessor();
+    _minRustle = 0;
+    _lastFlush = DateTime.now();
     farts = 0;
     snoreHitsTotal = 0;
     talks = 0;
@@ -380,6 +387,7 @@ class NightEngine extends ChangeNotifier {
 
   void _resetMinute() {
     _minMotion = 0;
+    _minRustle = 0;
     _minNoiseSum = 0;
     _minNoiseMax = -200;
     _minNoiseN = 0;
@@ -486,6 +494,11 @@ class NightEngine extends ChangeNotifier {
     final now = DateTime.now();
     if (!analysisActive && analysisFrom != null && !now.isBefore(analysisFrom!) && !lullabyPlaying) {
       analysisActive = true;
+    }
+    // Szelest pościeli / przewracanie się: krótki głośny dźwięk nad tłem (bez chrapania).
+    if (analysisActive && !lullabyPlaying && state == NightState.tracking && rms >= 1e-6 &&
+        db > noiseFloorDb + (cpap ? 14 : 10) && !_recentSnore(now)) {
+      _minRustle++;
     }
 
     _finalizePending();
@@ -698,17 +711,19 @@ class NightEngine extends ChangeNotifier {
   // RUCH
   // =====================================================================
   void _onAccel(AccelerometerEvent e) {
-    if (_ax != null) {
-      final d = sqrt(pow(e.x - _ax!, 2) + pow(e.y - _ay!, 2) + pow(e.z - _az!, 2));
-      final muted = _muteUntil != null && DateTime.now().isBefore(_muteUntil!);
+    final now = DateTime.now();
+    final muted = _muteUntil != null && now.isBefore(_muteUntil!);
+    final tracking = state == NightState.tracking;
+    // ~50 Hz: oddech z mikroruchów materaca; ruch liczony co ~200 ms jak dotychczas
+    final d = _acc.add(e.x, e.y, e.z, now.millisecondsSinceEpoch, count: tracking && !muted);
+    if (d != null) {
       // Drobny szum czujnika pomijamy.
-      if (d > 0.08 && !muted && state == NightState.tracking) {
+      if (d > AccelProcessor.motionThr && !muted && tracking) {
         _minMotion += d;
         _gapMotion += d;
       }
       // Potrząśnięcia (wyłączanie budzika)
       if (d > 12 && onShake != null) {
-        final now = DateTime.now();
         if (now.difference(_lastShake).inMilliseconds > 180) {
           _lastShake = now;
           _shakes++;
@@ -746,6 +761,16 @@ class NightEngine extends ChangeNotifier {
   Future<void> _flushMinute() async {
     final n = night;
     if (n?.id == null || state == NightState.idle) return;
+    // Ekran: odblokowanie telefonu w nocy = na pewno czuwanie (Android).
+    final now = DateTime.now();
+    var screen = 0;
+    for (final (_, t) in await BakometrNative.screenEvents(_lastFlush)) {
+      if (t > screen) screen = t;
+    }
+    _lastFlush = now;
+    final activeSec = _acc.takeActiveSeconds();
+    // Oddech z akcelerometru, gdy nie ma sonaru i minuta była spokojna.
+    final accBreath = (!sonarGood && activeSec <= 3) ? _acc.breath() : null;
     final m = MinuteSample(
       idx: _minuteIdx,
       ts: DateTime.now(),
@@ -759,9 +784,12 @@ class NightEngine extends ChangeNotifier {
       snore: _minSnore,
       apneas: _minApneas,
       sounds: _minSounds,
-      breathRate: sonarGood ? sonar!.minuteRate() : null,
-      breathVar: sonarGood ? sonar!.breathVar : null,
+      breathRate: sonarGood ? sonar!.minuteRate() : accBreath?.$1,
+      breathVar: sonarGood ? sonar!.breathVar : accBreath?.$2,
       sonarMotion: sonarActive ? _minSonarMotion : null,
+      activeSec: activeSec,
+      screen: screen,
+      rustle: _minRustle,
     );
     sonar?.clearMinute();
     _minSonarMotion = 0;

@@ -348,6 +348,9 @@ class MinuteSample {
   final bool snore;
   final int apneas;
   final int sounds; // inne zdarzenia dźwiękowe (mowa, kaszel) — oznaka płytkiego snu/czuwania
+  final int? activeSec; // sekundy minuty z ruchem wg akcelerometru (aktygrafia), null = brak danych
+  final int screen; // 0 = ekran wyłączony, 1 = ekran się włączył, 2 = telefon odblokowany
+  final int rustle; // krótkie głośne dźwięki (szelest pościeli) w minucie, w półsekundach
   Stage stage;
 
   MinuteSample({
@@ -365,6 +368,9 @@ class MinuteSample {
     this.snore = false,
     this.apneas = 0,
     this.sounds = 0,
+    this.activeSec,
+    this.screen = 0,
+    this.rustle = 0,
     this.stage = Stage.light,
   });
 
@@ -384,6 +390,9 @@ class MinuteSample {
         'snore': snore ? 1 : 0,
         'apneas': apneas,
         'sounds': sounds,
+        'active_sec': activeSec,
+        'screen': screen,
+        'rustle': rustle,
         'stage': stage.index,
       };
 
@@ -402,6 +411,9 @@ class MinuteSample {
         snore: (m['snore'] as int?) == 1,
         apneas: (m['apneas'] as int?) ?? 0,
         sounds: (m['sounds'] as int?) ?? 0,
+        activeSec: m['active_sec'] as int?,
+        screen: (m['screen'] as int?) ?? 0,
+        rustle: (m['rustle'] as int?) ?? 0,
         stage: Stage.values[(m['stage'] as int?) ?? 2],
       );
 }

@@ -496,7 +496,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ListTile(
               leading: const Icon(Icons.phone_android),
               title: const Text('Sprawdź ustawienie telefonu'),
-              subtitle: const Text('Test 25 s: materac, hałas, sonar'),
+              subtitle: const Text('Test 50 s: ruch, oddech, hałas, sonar'),
               trailing: const Icon(Icons.chevron_right),
               onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PlacementCheckScreen())),
             ),
@@ -625,7 +625,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
         ),
         const SizedBox(height: 16),
-        const Center(child: Text('Rytm Snu 2.13', style: TextStyle(color: C.muted, fontSize: 12))),
+        const Center(child: Text('Rytm Snu 2.14', style: TextStyle(color: C.muted, fontSize: 12))),
       ],
     );
   }
