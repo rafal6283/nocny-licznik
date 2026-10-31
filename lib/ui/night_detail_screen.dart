@@ -15,6 +15,7 @@ import '../core/watch_data.dart';
 import '../core/weather.dart';
 import '../engine/night_engine.dart';
 import 'charts.dart';
+import 'clip_player.dart';
 import 'theme.dart';
 
 class NightDetailScreen extends StatefulWidget {
@@ -34,6 +35,7 @@ class _NightDetailScreenState extends State<NightDetailScreen> {
   bool stepView = false;
   final player = AudioPlayer();
   int? playingId;
+  int? openId; // rozwinięte nagranie (przebieg + kontekst)
   final noteCtl = TextEditingController();
   Timer? _noteDebounce;
   WatchNight? watch;
@@ -250,7 +252,10 @@ class _NightDetailScreenState extends State<NightDetailScreen> {
     }
     try {
       await player.setFilePath(e.clipPath!);
-      setState(() => playingId = e.id);
+      setState(() {
+        playingId = e.id;
+        openId = e.id;
+      });
       await player.play();
     } catch (_) {
       if (mounted) {
@@ -258,6 +263,60 @@ class _NightDetailScreenState extends State<NightDetailScreen> {
       }
     }
   }
+
+  /// Przewinięcie nagrania (z rozwiniętego przebiegu); uruchamia je, jeśli nie gra.
+  Future<void> _seekClip(SoundEvent e, Duration at) async {
+    try {
+      if (playingId != e.id) {
+        await player.setFilePath(e.clipPath!);
+        setState(() {
+          playingId = e.id;
+          openId = e.id;
+        });
+        await player.seek(at);
+        unawaited(player.play());
+      } else {
+        await player.seek(at);
+        if (!player.playing) unawaited(player.play());
+      }
+    } catch (_) {}
+  }
+
+  Widget _clipPanel(SoundEvent e) {
+    final facts = clipFacts(e, Duration(milliseconds: max(e.durationMs, 3000)), ms, evs, _cpapTimes,
+        farts: Settings.instance.detectFarts);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(14, 0, 14, 12),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        ClipWaveView(
+          key: ValueKey(e.clipPath),
+          path: e.clipPath!,
+          color: C.sound(e.type),
+          player: player,
+          active: playingId == e.id,
+          onSeek: (at) => _seekClip(e, at),
+        ),
+        if (facts.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          const Text('W tym czasie', style: TextStyle(fontSize: 11, color: C.muted)),
+          const SizedBox(height: 4),
+          Wrap(spacing: 6, runSpacing: 6, children: [
+            for (final f in facts)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                decoration: BoxDecoration(color: C.surface, borderRadius: BorderRadius.circular(20)),
+                child: Text('${f.emoji} ${f.text}', style: const TextStyle(fontSize: 12, color: C.text)),
+              ),
+          ]),
+        ],
+      ]),
+    );
+  }
+
+  List<DateTime> get _cpapTimes => [
+        for (final r in ext)
+          if (r.$2.startsWith('ev_') && r.$2 != 'ev_arousal') r.$1
+      ];
 
   Future<void> _verify(SoundEvent e, bool? v) async {
     e.verified = v;
@@ -762,10 +821,7 @@ class _NightDetailScreenState extends State<NightDetailScreen> {
                     start: night.start,
                     end: end,
                     showFarts: Settings.instance.detectFarts,
-                    cpapEvents: [
-                      for (final r in ext)
-                        if (r.$2.startsWith('ev_') && r.$2 != 'ev_arousal') r.$1
-                    ]),
+                    cpapEvents: _cpapTimes),
               const SizedBox(height: 6),
               Text(_sourceNote(night.stageSource), style: const TextStyle(fontSize: 11, color: C.muted)),
             ]),
@@ -856,7 +912,9 @@ class _NightDetailScreenState extends State<NightDetailScreen> {
                 Container(
                   margin: const EdgeInsets.only(top: 6),
                   decoration: BoxDecoration(color: C.surface2, borderRadius: BorderRadius.circular(14)),
-                  child: ListTile(
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                  ListTile(
+                    onTap: () => setState(() => openId = openId == e.id ? null : e.id),
                     contentPadding: const EdgeInsets.only(left: 4, right: 4),
                     leading: IconButton(
                       icon: Icon(playingId == e.id ? Icons.stop_circle : Icons.play_circle, color: C.sound(e.type), size: 34),
@@ -866,7 +924,14 @@ class _NightDetailScreenState extends State<NightDetailScreen> {
                         style: TextStyle(
                             decoration: e.verified == false ? TextDecoration.lineThrough : null,
                             color: e.verified == false ? C.muted : C.text)),
-                    subtitle: Text('pewność ${(e.confidence * 100).round()}%',
+                    subtitle: Text(
+                        'pewność ${(e.confidence * 100).round()}%'
+                        '${() {
+                          final f = clipFacts(e, Duration(milliseconds: max(e.durationMs, 3000)), ms, evs, _cpapTimes,
+                              farts: Settings.instance.detectFarts);
+                          final icons = f.where((x) => x.emoji != '🛌').map((x) => x.emoji).join(' ');
+                          return icons.isEmpty ? '' : '  ·  $icons';
+                        }()}',
                         style: const TextStyle(fontSize: 12, color: C.muted)),
                     trailing: Row(mainAxisSize: MainAxisSize.min, children: [
                       IconButton(
@@ -881,6 +946,8 @@ class _NightDetailScreenState extends State<NightDetailScreen> {
                       ),
                     ]),
                   ),
+                  if (openId == e.id) _clipPanel(e),
+                  ]),
                 ),
               const SizedBox(height: 6),
               const Text('Odrzucone nagrania nie liczą się do wyniku nocy.',
