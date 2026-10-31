@@ -415,6 +415,9 @@ class _NightDetailScreenState extends State<NightDetailScreen> {
             'połóż telefon na materacu albo włącz sonar.',
         'szablon' => 'Brak sygnału ruchu i dźwięków — pokazany typowy przebieg cykli snu, nie Twoje fazy. '
             'Połóż telefon na materacu obok poduszki albo włącz sonar.',
+        final s? when s.startsWith('opaska') =>
+          'Fazy z opaski na klatce: ruch tułowia, tętno i HRV, oddech z ruchu klatki'
+              '${s.contains('+') ? ', uzupełnione ruchem telefonu/sonaru' : ''} (+ chrapanie). Szacunek, nie badanie snu.',
         _ => 'Szacunek faz z ruchu i dźwięku, nie badanie snu.',
       };
 

@@ -256,21 +256,32 @@ class SleepAnalysis {
     final son = ms.any((m) => m.sonarMotion != null)
         ? tryValues([for (final m in ms) m.sonarMotion ?? 0], 'sonar')
         : null;
-    if (accel != null && son != null) {
-      // Oba źródła: każde w swojej skali (względem mediany swoich ruchów), w minucie bierzemy silniejsze.
-      // Sonar dokłada drobne ruchy, których telefon na materacu nie czuje.
+    // Oba źródła: każde w swojej skali (względem mediany swoich ruchów), w minucie bierzemy silniejsze.
+    MovementSignal fuse(MovementSignal a, MovementSignal b, String source) {
       double medOf(MovementSignal m) {
         final e = [for (final x in m.values) if (x > m.threshold) x]..sort();
         return e.isEmpty ? 1 : e[e.length ~/ 2];
       }
 
-      final ma = medOf(accel), mso = medOf(son);
+      final ma = medOf(a), mb = medOf(b);
       final fused = [
         for (var i = 0; i < n; i++)
-          max(accel.values[i] > accel.threshold ? accel.values[i] / ma : 0.0,
-              son.values[i] > son.threshold ? son.values[i] / mso : 0.0)
+          max(a.values[i] > a.threshold ? a.values[i] / ma : 0.0, b.values[i] > b.threshold ? b.values[i] / mb : 0.0)
       ];
-      return MovementSignal(fused, 1e-9, 'ruch+sonar');
+      return MovementSignal(fused, 1e-9, source);
+    }
+
+    // Opaska na klatce: ruch tułowia mierzony na ciele – główne źródło, telefon/sonar dokładają ruchy nóg.
+    final strap = ms.where((m) => m.strapAct != null).length >= 0.6 * n
+        ? tryValues([for (final m in ms) (m.strapAct ?? 0).toDouble()], 'opaska')
+        : null;
+    if (strap != null) {
+      final other = accel ?? son;
+      return other == null ? strap : fuse(strap, other, 'opaska+${other.source}');
+    }
+    if (accel != null && son != null) {
+      // Sonar dokłada drobne ruchy, których telefon na materacu nie czuje.
+      return fuse(accel, son, 'ruch+sonar');
     }
     if (accel != null) return accel;
     if (son != null) return son;
@@ -358,6 +369,10 @@ class SleepAnalysis {
     final hrs = [for (final m in ms) if (m.hr != null) m.hr!]..sort();
     final medHr = hrs.length >= 60 ? hrs[hrs.length ~/ 2] : null;
     int b3(double rel) => rel < 0.95 ? 0 : (rel > 1.05 ? 2 : 1);
+    // HRV z opaski (RMSSD) względem mediany nocy: w głębokim śnie wyższe, w REM i czuwaniu niższe.
+    final hrvs = [for (final m in ms) if (m.hrv != null) m.hrv!]..sort();
+    final medHrv = hrvs.length >= 60 ? hrvs[hrvs.length ~/ 2] : null;
+    int hrvBin(double rel) => rel < 0.8 ? 0 : (rel > 1.25 ? 2 : 1);
 
     var onset0 = 0;
     var run = 0;
@@ -379,6 +394,7 @@ class SleepAnalysis {
           (ms[i].breathRate != null && medRate != null) ? b3(ms[i].breathRate! / medRate) : null,
           screen: ms[i].screen.clamp(0, 2),
           rustle: mv.source != 'dźwięk' ? (ms[i].rustle >= 2 && !ms[i].snore) : null,
+          hrvBin: (ms[i].hrv != null && medHrv != null && medHrv > 0) ? hrvBin(ms[i].hrv! / medHrv) : null,
         )
     ];
     return (feats, onset0);
@@ -406,6 +422,7 @@ class SleepAnalysis {
         if (f.rateBin != null) e += log(md.pRate[k][f.rateBin!]);
         e += log(md.pScreen[k][f.screen]);
         if (f.rustle != null) e += log(f.rustle! ? md.pRustle[k] : 1 - md.pRustle[k]);
+        if (f.hrvBin != null) e += log(md.pHrv[k][f.hrvBin!]);
         if (w != null) e += log(w == k ? _watchTrust : (1 - _watchTrust) / 3);
         out[k] = e;
       }
@@ -480,8 +497,11 @@ class SleepAnalysis {
   }
 
   /// Czy w ostatnich minutach śpiący jest w lekkim śnie / się wierci (inteligentny budzik).
-  static bool lightPhaseNow(List<MinuteSample> ms, double currentMinuteMotion) {
+  static bool lightPhaseNow(List<MinuteSample> ms, double currentMinuteMotion, {bool strapMovingNow = false}) {
     if (ms.length < 15) return true;
+    // Opaska: ruch tułowia w ostatnich minutach (dokładniejszy niż telefon na materacu).
+    final strapRecent = ms.skip(max(0, ms.length - 2)).map((m) => m.strapAct).whereType<int>().toList();
+    if (strapRecent.isNotEmpty) return strapMovingNow || strapRecent.any((a) => a >= 2);
     // Lekki sen = jakikolwiek wyraźny ruch w ostatnich ~3 minutach (jak w Sleep as Android).
     final motion = ms.map((m) => m.motion).where((m) => m > 0).toList();
     if (motion.isEmpty) return currentMinuteMotion > 0;

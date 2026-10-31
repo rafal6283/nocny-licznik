@@ -27,6 +27,10 @@ class StrapCard extends StatelessWidget {
     final irr = [for (final r in ext) if (r.$2 == 'h10af') (r.$1, r.$1.add(Duration(seconds: ((r.$4 ?? 0) * 60).round())))];
     final pauses = [for (final r in ext) if (r.$2 == 'h10pa') (r.$1, r.$3 ?? 2)];
     final ect = [for (final r in ext) if (r.$2 == 'h10pv') r.$1];
+    final posCh = ext.where((r) => r.$2 == 'h10po').length;
+    final hrvs = [for (final m in minutes) if (m.hrv != null) m.hrv!]..sort();
+    final hrvMed = hrvs.isEmpty ? null : hrvs[hrvs.length ~/ 2];
+    final hasAcc = minutes.any((m) => m.strapAct != null);
     final af = [
       for (final (a, b) in polarAf)
         if (a.isBefore(end) && b.isAfter(night.start)) (a.isBefore(night.start) ? night.start : a, b.isAfter(end) ? end : b)
@@ -59,11 +63,19 @@ class StrapCard extends StatelessWidget {
           StatTile(label: 'Pobudzenia dodatkowe', value: '${ect.length}', color: _ectColor),
           StatTile(label: 'Nieregularny rytm', value: durHM(irrMin), color: _irrColor),
           StatTile(label: 'AF (Polar EKG)', value: af.isEmpty ? '—' : durHM(afMin), color: _afColor),
+          StatTile(label: 'HRV (RMSSD)', value: hrvMed == null ? '—' : '${hrvMed.round()} ms', sub: 'mediana nocy'),
+          if (hasAcc) StatTile(label: 'Zmiany pozycji', value: '$posCh'),
+          if (hasAcc)
+            StatTile(
+                label: 'Bez ruchu tułowia',
+                value: durHM(minutes.where((m) => m.strapAct == 0).length),
+                sub: 'z ${durHM(minutes.where((m) => m.strapAct != null).length)}'),
         ]),
         const SizedBox(height: 8),
         Text(
           hasStrap
-              ? 'Z odstępów RR opaski. Nieregularny rytm to przesiew – potwierdza go EKG (Polar EKG nagrywany tej nocy). '
+              ? 'Tętno, HRV, ruch tułowia i oddech z opaski wchodzą do rozpoznawania faz snu. '
+                  'Rytm z odstępów RR: nieregularny rytm to przesiew – potwierdza go EKG. '
                   'Pojedyncze pobudzenia dodatkowe i krótkie pauzy we śnie zdarzają się u zdrowych osób.'
               : 'Brak danych z opaski tej nocy. Wybierz opaskę w Ustawieniach → Opaska na klatkę piersiową.',
           style: const TextStyle(fontSize: 11, color: C.muted),

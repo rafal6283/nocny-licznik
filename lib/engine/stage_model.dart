@@ -13,8 +13,9 @@ class MinuteFeat {
   final int? rateBin; // tempo oddechu względem mediany nocy
   final int screen; // 0 brak, 1 ekran się włączył, 2 odblokowanie
   final bool? rustle; // szelest pościeli (null = nieużywane)
+  final int? hrvBin; // HRV z opaski względem mediany nocy: 0 niższe, 1 typowe, 2 wyższe
   const MinuteFeat(this.cat, this.snore, this.sound, this.irregular, this.hrBin, this.rateBin,
-      {this.screen = 0, this.rustle});
+      {this.screen = 0, this.rustle, this.hrvBin});
 }
 
 /// Prawdopodobieństwa cech w każdej fazie (kolejność faz = Stage.values: wake, rem, light, deep).
@@ -25,10 +26,19 @@ class StageModel {
   final List<List<double>> pRate, pHr; // 4×3
   final List<List<double>> pScreen; // 4×3: brak / ekran / odblokowanie
   final List<double> pRustle; // 4
+  final List<List<double>> pHrv; // 4×3: HRV z opaski niższe / typowe / wyższe
   final int nights; // z ilu nocy z zegarkiem się nauczył (0 = domyślny)
   final int minutes;
   const StageModel(this.em, this.pSnore, this.pSound, this.pIrregular, this.pRate, this.pHr,
-      {this.pScreen = _defScreen, this.pRustle = _defRustle, this.nights = 0, this.minutes = 0});
+      {this.pScreen = _defScreen, this.pRustle = _defRustle, this.pHrv = _defHrv, this.nights = 0, this.minutes = 0});
+
+  // Głęboki sen – przewaga układu przywspółczulnego (wysokie RMSSD); REM i czuwanie – niższe, zmienne.
+  static const _defHrv = [
+    [0.40, 0.35, 0.25],
+    [0.45, 0.40, 0.15],
+    [0.25, 0.50, 0.25],
+    [0.12, 0.38, 0.50],
+  ];
 
   static const _defScreen = [
     [0.86, 0.08, 0.06],
@@ -77,6 +87,7 @@ class StageModel {
         'hr': pHr,
         'screen': pScreen,
         'rustle': pRustle,
+        'hrv': pHrv,
         'nights': nights,
         'minutes': minutes,
       };
@@ -90,6 +101,7 @@ class StageModel {
       final out = StageModel(mx(m['em']), v(m['snore']), v(m['sound']), v(m['irr']), mx(m['rate']), mx(m['hr']),
           pScreen: m['screen'] != null ? mx(m['screen']) : _defScreen,
           pRustle: m['rustle'] != null ? v(m['rustle']) : _defRustle,
+          pHrv: m['hrv'] != null ? mx(m['hrv']) : _defHrv,
           nights: (m['nights'] as num?)?.toInt() ?? 0, minutes: (m['minutes'] as num?)?.toInt() ?? 0);
       if (out.em.length != 4 || out.em.any((r) => r.length != 7)) return null;
       return out;
@@ -109,6 +121,7 @@ class StageCounts {
   final hr = List.generate(4, (_) => List<double>.filled(3, 0));
   final screen = List.generate(4, (_) => List<double>.filled(3, 0));
   final rustle = List.generate(4, (_) => List<double>.filled(2, 0));
+  final hrv = List.generate(4, (_) => List<double>.filled(3, 0));
   int nights = 0;
   int minutes = 0;
 
@@ -121,6 +134,7 @@ class StageCounts {
     if (f.hrBin != null) hr[k][f.hrBin!]++;
     screen[k][f.screen]++;
     if (f.rustle != null) rustle[k][f.rustle! ? 1 : 0]++;
+    if (f.hrvBin != null) hrv[k][f.hrvBin!]++;
     minutes++;
   }
 
@@ -141,6 +155,7 @@ class StageCounts {
     _acc(hr, o.hr, sign);
     _acc(screen, o.screen, sign);
     _acc(rustle, o.rustle, sign);
+    _acc(hrv, o.hrv, sign);
     nights += sign > 0 ? o.nights : -o.nights;
     minutes += sign > 0 ? o.minutes : -o.minutes;
   }
@@ -168,6 +183,7 @@ class StageCounts {
       [for (var k = 0; k < 4; k++) row(prior.pHr[k], hr[k])],
       pScreen: [for (var k = 0; k < 4; k++) row(prior.pScreen[k], screen[k])],
       pRustle: bin(prior.pRustle, rustle),
+      pHrv: [for (var k = 0; k < 4; k++) row(prior.pHrv[k], hrv[k])],
       nights: nights,
       minutes: minutes,
     );

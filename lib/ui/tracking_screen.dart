@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../core/fmt.dart';
 import '../core/models.dart';
 import '../core/settings.dart';
+import '../core/strap.dart';
 import '../engine/night_engine.dart';
 import 'theme.dart';
 
@@ -119,6 +120,13 @@ class _TrackingScreenState extends State<TrackingScreen> {
             if (e.cpap) ...[
               const SizedBox(width: 8),
               _pill('😷 CPAP', C.muted),
+            ],
+            if (Strap.instance.status.value != null) ...[
+              const SizedBox(width: 8),
+              ValueListenableBuilder<int?>(
+                valueListenable: Strap.instance.lastHr,
+                builder: (_, hr, __) => _pill(hr == null ? '♥ ${Strap.instance.status.value ?? ''}' : '♥ $hr', const Color(0xFFFF6B8A)),
+              ),
             ],
             const SizedBox(width: 8),
             _pill('☀️ ${luxLabel(e.lastLux)}', C.moon),

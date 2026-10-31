@@ -585,7 +585,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
               secondary: const Icon(Icons.monitor_heart_outlined),
               title: const Text('Opaska na klatkę piersiową'),
               subtitle: Text(s.strapId.isEmpty
-                  ? 'Polar H10 albo inny pulsometr Bluetooth: tętno, pauzy, pobudzenia dodatkowe i nieregularny rytm na wykresie nocy'
+                  ? 'Polar H10 albo inny pulsometr Bluetooth – działa sama, bez innych aplikacji. Tętno, HRV, ruch tułowia i oddech (H10) '
+                      'poprawiają rozpoznawanie faz snu; do tego pauzy, pobudzenia dodatkowe i nieregularny rytm'
                   : '${s.strapName.isEmpty ? s.strapId : s.strapName} · łączy się sama na czas nocy (obok Polar EKG)'),
               value: s.strapOn && s.strapId.isNotEmpty,
               onChanged: (v) async {
@@ -659,7 +660,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
         ),
         const SizedBox(height: 16),
-        const Center(child: Text('Rytm Snu 2.15', style: TextStyle(color: C.muted, fontSize: 12))),
+        const Center(child: Text('Rytm Snu 2.16', style: TextStyle(color: C.muted, fontSize: 12))),
       ],
     );
   }

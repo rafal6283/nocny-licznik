@@ -25,6 +25,7 @@ import 'classifier.dart';
 import 'accel_breath.dart';
 import 'sleep_analysis.dart';
 import 'stage_model.dart';
+import 'strap_minute.dart';
 import 'sonar.dart';
 
 enum NightState { idle, tracking, ringing, snoozed, finishing }
@@ -760,6 +761,13 @@ class NightEngine extends ChangeNotifier {
   // =====================================================================
   // MINUTA
   // =====================================================================
+  /// Ruch tułowia w minucie; obrót ciała liczy się jak wyraźny ruch.
+  static int? _strapAct(StrapMinute? s) {
+    final a = s?.activeSec;
+    if (s == null || a == null) return null;
+    return s.posChange ? max(a, 10) : a;
+  }
+
   Future<void> _flushMinute() async {
     final n = night;
     if (n?.id == null || state == NightState.idle) return;
@@ -771,8 +779,12 @@ class NightEngine extends ChangeNotifier {
     }
     _lastFlush = now;
     final activeSec = _acc.takeActiveSeconds();
+    // Opaska na klatce (jeśli jest): tętno, HRV, ruch tułowia, oddech z ruchu klatki.
+    final strap = Strap.instance.takeMinute();
     // Oddech z akcelerometru, gdy nie ma sonaru i minuta była spokojna.
     final accBreath = (!sonarGood && activeSec <= 3) ? _acc.breath() : null;
+    // Kolejność źródeł oddechu: opaska (ruch klatki) → sonar → telefon na materacu.
+    final strapBreath = strap?.breathRate != null;
     final m = MinuteSample(
       idx: _minuteIdx,
       ts: DateTime.now(),
@@ -786,8 +798,11 @@ class NightEngine extends ChangeNotifier {
       snore: _minSnore,
       apneas: _minApneas,
       sounds: _minSounds,
-      breathRate: sonarGood ? sonar!.minuteRate() : accBreath?.$1,
-      breathVar: sonarGood ? sonar!.breathVar : accBreath?.$2,
+      breathRate: strapBreath ? strap!.breathRate : (sonarGood ? sonar!.minuteRate() : accBreath?.$1),
+      breathVar: strapBreath ? strap!.breathVar : (sonarGood ? sonar!.breathVar : accBreath?.$2),
+      hr: strap?.hr,
+      hrv: strap?.rmssd,
+      strapAct: _strapAct(strap),
       sonarMotion: sonarActive ? _minSonarMotion : null,
       activeSec: activeSec,
       screen: screen,
@@ -830,7 +845,7 @@ class NightEngine extends ChangeNotifier {
     }
     final windowStart = alarm.subtract(Duration(minutes: n.smartWindowMin));
     if (n.smartWindowMin > 0 && !now.isBefore(windowStart)) {
-      if (SleepAnalysis.lightPhaseNow(minutes, _minMotion)) {
+      if (SleepAnalysis.lightPhaseNow(minutes, _minMotion, strapMovingNow: Strap.instance.movingNow)) {
         ring('Inteligentny budzik — lekki sen');
       }
     }

@@ -11,7 +11,9 @@ import 'bus.dart';
 import 'db.dart';
 import 'models.dart';
 import 'settings.dart';
+import '../engine/strap_minute.dart';
 import 'strap_analysis.dart';
+import 'strap_pmd.dart';
 
 /// Opaska na klatkę piersiową (Polar H10 albo inny pulsometr BLE) w czasie nocy: tętno i odstępy RR
 /// ze standardowej usługi Heart Rate. Działa obok Polar EKG (opaska H10 obsługuje dwa połączenia).
@@ -22,6 +24,30 @@ class Strap {
 
   static final _hrService = Guid('180d');
   static final _hrChar = Guid('2a37');
+  static final _pmdService = Guid('FB005C80-02E7-F387-1CAD-8ACD2D8DF0C8');
+  static final _pmdControl = Guid('FB005C81-02E7-F387-1CAD-8ACD2D8DF0C8');
+  static final _pmdData = Guid('FB005C82-02E7-F387-1CAD-8ACD2D8DF0C8');
+
+  /// Dane bieżącej minuty (tętno, HRV, ruch tułowia, oddech) – odbierane przez silnik nocy co minutę.
+  StrapMinuteProcessor _proc = StrapMinuteProcessor();
+  StreamSubscription<List<int>>? _pmdSub;
+  BluetoothCharacteristic? _pmdCtl;
+  bool _accStartedByUs = false;
+  bool accActive = false;
+  int _accActiveNow = 0; // sekundy z ruchem od początku bieżącej minuty (budzik)
+
+  /// Minuta danych z opaski (null, gdy opaska nic nie przysłała).
+  StrapMinute? takeMinute() {
+    final m = _proc.take();
+    _accActiveNow = 0;
+    if (m != null && m.posChange) {
+      _sink?.writeln('P,${DateTime.now().millisecondsSinceEpoch}');
+    }
+    return m;
+  }
+
+  /// Czy tułów poruszał się w bieżącej minucie (inteligentny budzik).
+  bool get movingNow => _accActiveNow >= 2;
 
   /// Stan dla ekranu nocy: null = opaska nieużywana.
   final status = ValueNotifier<String?>(null);
@@ -45,6 +71,9 @@ class Strap {
   Future<void> start(int nightId) async {
     if (!configured || _nightId != null) return;
     _nightId = nightId;
+    _proc = StrapMinuteProcessor();
+    accActive = false;
+    _accStartedByUs = false;
     try {
       _sink = (await fileFor(nightId)).openWrite(mode: FileMode.append);
       final dev = _dev = BluetoothDevice.fromId(Settings.instance.strapId);
@@ -77,8 +106,51 @@ class Strap {
       _valSub = ch.onValueReceived.listen(_onValue);
       await ch.setNotifyValue(true);
       status.value = 'opaska połączona';
+      await _startAcc(dev, services);
     } catch (e) {
       status.value = 'opaska: $e';
+    }
+  }
+
+  /// Akcelerometr Polar H10 (PMD). Gdy pomiar już trwa (np. nagrywa Polar EKG), tylko słuchamy ramek.
+  Future<void> _startAcc(BluetoothDevice dev, List<BluetoothService> services) async {
+    final pmd = services.where((s) => s.uuid == _pmdService).firstOrNull;
+    if (pmd == null) return; // inny pulsometr – samo tętno
+    try {
+      if (Platform.isAndroid) {
+        try {
+          await dev.requestMtu(232);
+        } catch (_) {}
+      }
+      final ctl = pmd.characteristics.firstWhere((c) => c.uuid == _pmdControl);
+      final data = pmd.characteristics.firstWhere((c) => c.uuid == _pmdData);
+      _pmdCtl = ctl;
+      await _pmdSub?.cancel();
+      _pmdSub = data.onValueReceived.listen((v) {
+        final xyz = parseAccFrame(v);
+        if (xyz == null) return;
+        accActive = true;
+        final now = DateTime.now().millisecondsSinceEpoch;
+        _proc.addAcc(xyz, now);
+        // ruch „teraz” do budzika: duża zmiana między pierwszą a ostatnią próbką ramki
+        if (xyz.length >= 6) {
+          final d = (xyz[xyz.length - 3] - xyz[0]).abs() + (xyz[xyz.length - 2] - xyz[1]).abs() + (xyz[xyz.length - 1] - xyz[2]).abs();
+          if (d > 150) _accActiveNow++;
+        }
+      });
+      await ctl.setNotifyValue(true);
+      await data.setNotifyValue(true);
+      final resp = Completer<List<int>>();
+      final sub = ctl.onValueReceived.listen((v) {
+        if (v.length > 3 && v[0] == 0xF0 && !resp.isCompleted) resp.complete(v);
+      });
+      await ctl.write(pmdStartAcc);
+      final r = await resp.future.timeout(const Duration(seconds: 5), onTimeout: () => const [0xF0, 0, 0, 0]);
+      await sub.cancel();
+      _accStartedByUs = r[3] == 0; // 6 = pomiar już trwa (np. Polar EKG) – nie zatrzymujemy go potem
+      status.value = 'opaska połączona · tętno i ruch';
+    } catch (e) {
+      status.value = 'opaska połączona (bez akcelerometru)';
     }
   }
 
@@ -86,6 +158,7 @@ class Strap {
     final m = parseHeartRate(v);
     if (m == null) return;
     lastHr.value = m.$1;
+    _proc.addHr(m.$1, m.$2);
     final t = DateTime.now().millisecondsSinceEpoch;
     _sink?.writeln('$t,${m.$1},${m.$2.map((x) => x.round()).join(';')}');
   }
@@ -95,6 +168,15 @@ class Strap {
     final id = _nightId;
     _nightId = null;
     if (id == null) return;
+    if (_accStartedByUs) {
+      try {
+        await _pmdCtl?.write(pmdStopAcc);
+      } catch (_) {}
+    }
+    await _pmdSub?.cancel();
+    _pmdSub = null;
+    _pmdCtl = null;
+    accActive = false;
     await _valSub?.cancel();
     await _connSub?.cancel();
     _valSub = null;
@@ -119,7 +201,7 @@ class Strap {
     final out = <(DateTime, double)>[];
     for (final line in const LineSplitter().convert(await f.readAsString())) {
       final p = line.split(',');
-      if (p.length < 3 || p[2].isEmpty) continue;
+      if (p.length < 3 || p[2].isEmpty || p[0] == 'P') continue;
       final t = int.tryParse(p[0]);
       if (t == null) continue;
       final rr = p[2].split(';').map(double.tryParse).whereType<double>().toList();
@@ -135,10 +217,22 @@ class Strap {
     return out;
   }
 
+  /// Zmiany pozycji ciała zapisane w nocy (akcelerometr H10).
+  static Future<List<DateTime>> loadPositionChanges(int nightId) async {
+    final f = await fileFor(nightId);
+    if (!await f.exists()) return const [];
+    return [
+      for (final line in const LineSplitter().convert(await f.readAsString()))
+        if (line.startsWith('P,'))
+          if (int.tryParse(line.substring(2)) case final t?) DateTime.fromMillisecondsSinceEpoch(t)
+    ];
+  }
+
   /// Wyniki z opaski do nocy: tętno minutowe, pauzy, pobudzenia dodatkowe, nieregularny rytm.
   static Future<StrapResult?> applyToNight(Night n) async {
     if (n.id == null) return null;
     final rr = await loadRr(n.id!);
+    final pos = await loadPositionChanges(n.id!);
     if (rr.length < 300) return null;
     final r = analyzeStrap(rr);
     final ms = await Db.instance.minutes(n.id!);
@@ -154,6 +248,7 @@ class Strap {
       for (final (a, b) in r.irregular) (a, 'h10af', null, b.difference(a).inSeconds / 60.0),
       for (final (t, s) in r.pauses) (t, 'h10pa', s, null),
       for (final t in r.ectopic) (t, 'h10pv', null, null),
+      for (final t in pos) (t, 'h10po', null, null),
     ]);
     if (r.hrAvg != null) {
       n.hrAvg = r.hrAvg;

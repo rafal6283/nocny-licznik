@@ -27,7 +27,7 @@ class Db {
     final dir = await getDatabasesPath();
     return openDatabase(
       p.join(dir, 'bakometr.db'),
-      version: 9,
+      version: 10,
       onUpgrade: (db, from, to) async {
         if (from < 2) {
           await db.execute('ALTER TABLE nights ADD COLUMN apnea_count INTEGER');
@@ -84,6 +84,11 @@ class Db {
         }
         if (from < 7) {
           await db.execute('ALTER TABLE nights ADD COLUMN stage_source TEXT');
+        }
+        if (from < 10) {
+          // opaska na klatkę: HRV (RMSSD) i sekundy z ruchem tułowia
+          await db.execute('ALTER TABLE minutes ADD COLUMN hrv REAL');
+          await db.execute('ALTER TABLE minutes ADD COLUMN strap_act INTEGER');
         }
       },
       onCreate: (db, v) async {
@@ -179,6 +184,8 @@ class Db {
             active_sec INTEGER,
             screen INTEGER,
             rustle INTEGER,
+            hrv REAL,
+            strap_act INTEGER,
             stage INTEGER,
             PRIMARY KEY(night_id, idx)
           )''');

@@ -8,6 +8,10 @@ class AccelProcessor {
   static const frameMs = 200; // 5 Hz
   static const motionThr = 0.08; // m/s² — jak dotychczas
 
+  /// Próg ruchu [m/s²]; opaska na klatce czuje oddech, więc ma wyższy próg niż telefon na materacu.
+  final double thr;
+  AccelProcessor({this.thr = motionThr});
+
   // ruch co ~200 ms
   double? _rx, _ry, _rz;
   int _refMs = 0;
@@ -61,7 +65,7 @@ class AccelProcessor {
     _ry = y;
     _rz = z;
     _refMs = nowMs;
-    if (count && d > motionThr) _activeSec.add(nowMs ~/ 1000);
+    if (count && d > thr) _activeSec.add(nowMs ~/ 1000);
     return d;
   }
 

@@ -351,6 +351,8 @@ class MinuteSample {
   final int? activeSec; // sekundy minuty z ruchem wg akcelerometru (aktygrafia), null = brak danych
   final int screen; // 0 = ekran wyłączony, 1 = ekran się włączył, 2 = telefon odblokowany
   final int rustle; // krótkie głośne dźwięki (szelest pościeli) w minucie, w półsekundach
+  final double? hrv; // opaska: RMSSD odstępów RR w minucie [ms]
+  final int? strapAct; // opaska: sekundy z ruchem tułowia w minucie (akcelerometr opaski)
   Stage stage;
 
   MinuteSample({
@@ -371,6 +373,8 @@ class MinuteSample {
     this.activeSec,
     this.screen = 0,
     this.rustle = 0,
+    this.hrv,
+    this.strapAct,
     this.stage = Stage.light,
   });
 
@@ -393,6 +397,8 @@ class MinuteSample {
         'active_sec': activeSec,
         'screen': screen,
         'rustle': rustle,
+        'hrv': hrv,
+        'strap_act': strapAct,
         'stage': stage.index,
       };
 
@@ -414,6 +420,8 @@ class MinuteSample {
         activeSec: m['active_sec'] as int?,
         screen: (m['screen'] as int?) ?? 0,
         rustle: (m['rustle'] as int?) ?? 0,
+        hrv: (m['hrv'] as num?)?.toDouble(),
+        strapAct: m['strap_act'] as int?,
         stage: Stage.values[(m['stage'] as int?) ?? 2],
       );
 }
