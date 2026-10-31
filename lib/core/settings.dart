@@ -151,6 +151,20 @@ class Settings extends ChangeNotifier {
   bool get watchData => _b('watchData', false);
   set watchData(bool v) => _set('watchData', v);
 
+  bool get watchStagesBackfilled => _b('watchStagesBf', false);
+  set watchStagesBackfilled(bool v) => _set('watchStagesBf', v);
+
+  // --- Kalibracja (uczenie na zegarku, aparacie CPAP i ocenach nagrań) ---
+  bool get autoCalibration => _b('autoCalib', true);
+  set autoCalibration(bool v) => _set('autoCalib', v);
+  String get stageModelJson => _s('stageModel', '');
+  set stageModelJson(String v) => _set('stageModel', v);
+  /// Progi pewności na rodzaj dźwięku (JSON: {"snore":0.42,...}).
+  String get minConfJson => _s('minConf', '');
+  set minConfJson(String v) => _set('minConf', v);
+  int get calibSnoreNights => _i('calibSnoreN', 0);
+  set calibSnoreNights(int v) => _set('calibSnoreN', v);
+
   bool get keepScreenOn => _b('keepScreenOn', false);
   set keepScreenOn(bool v) => _set('keepScreenOn', v);
 

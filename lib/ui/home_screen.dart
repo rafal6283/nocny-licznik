@@ -12,6 +12,7 @@ import '../core/stats_util.dart';
 import '../engine/night_engine.dart';
 import 'charts.dart';
 import 'diagnostics_screen.dart';
+import 'placement_check_screen.dart';
 import 'theme.dart';
 
 const lullabies = {
@@ -342,6 +343,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           'Połóż telefon na materacu obok poduszki, ekranem do góry, najlepiej na ładowarce.',
           textAlign: TextAlign.center,
           style: TextStyle(fontSize: 12, color: C.muted),
+        ),
+        Center(
+          child: TextButton.icon(
+            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PlacementCheckScreen())),
+            icon: const Icon(Icons.phone_android, size: 18),
+            label: const Text('Sprawdź ustawienie telefonu (25 s)'),
+          ),
         ),
         const SizedBox(height: 20),
 

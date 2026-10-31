@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import 'core/cloud.dart';
+import 'core/calibration.dart';
 import 'core/settings.dart';
 import 'core/watch_data.dart';
 import 'core/weather.dart';
@@ -80,6 +81,7 @@ class _BakometrAppState extends State<BakometrApp> {
   Future<void> _init() async {
     try {
       await _run('Ustawienia', Settings.instance.load);
+      Calibration.load();
       await _run('Baza danych', NightEngine.recoverUnfinished, required: false);
       if (Settings.instance.stagingVersion < NightEngine.stagingVersion) {
         await _run('Przeliczanie faz snu (nowy algorytm)', () async {
@@ -88,7 +90,8 @@ class _BakometrAppState extends State<BakometrApp> {
         }, required: false, timeoutSec: 120);
       }
       unawaited(WeatherService.backfill());
-      unawaited(WatchNight.backfillRecent());
+      // dane z zegarka, potem kalibracja (fazy z zegarka, aparat CPAP, oceny nagrań)
+      unawaited(WatchNight.backfillRecent().catchError((_) => 0).then((_) => Calibration.run()).catchError((_) => CalibReport()));
       // kopia/podgląd Koofr — w tle, bez wpływu na start
       unawaited(Future.delayed(const Duration(seconds: 5), Cloud.autoRun));
       unawaited(Cloud.init().then((_) => Cloud.startBackground()));

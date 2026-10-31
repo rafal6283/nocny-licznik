@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
@@ -8,6 +9,7 @@ import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../core/cpap_import.dart';
+import '../core/calibration.dart';
 import '../core/db.dart';
 import '../core/exchange_export.dart';
 import '../core/fmt.dart';
@@ -17,7 +19,9 @@ import '../core/resmed_import.dart';
 import '../core/settings.dart';
 import '../core/weather.dart';
 import 'cloud_screen.dart';
+import 'accuracy_screen.dart';
 import 'diagnostics_screen.dart';
+import 'placement_check_screen.dart';
 import 'sonar_test_screen.dart';
 import 'theme.dart';
 
@@ -186,6 +190,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         }
         res = await ResmedImport.importFiles(files);
       }
+      if (res.nightsDetail > 0) unawaited(Calibration.run());
       if (res.problems.isNotEmpty && res.nightsSummary == 0 && res.nightsDetail == 0) {
         _snack(res.problems.first);
       } else if (res.nightsSummary == 0 && res.nightsDetail == 0) {
@@ -478,6 +483,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ]),
         ),
 
+        _head('Dokładność'),
+        Card(
+          child: Column(children: [
+            ListTile(
+              leading: const Icon(Icons.insights),
+              title: const Text('Dokładność i kalibracja'),
+              subtitle: const Text('Zgodność z zegarkiem i aparatem CPAP, uczenie na Twoich nocach'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AccuracyScreen())),
+            ),
+            ListTile(
+              leading: const Icon(Icons.phone_android),
+              title: const Text('Sprawdź ustawienie telefonu'),
+              subtitle: const Text('Test 25 s: materac, hałas, sonar'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PlacementCheckScreen())),
+            ),
+          ]),
+        ),
+
         _head('Diagnostyka'),
         Card(
           child: ListTile(
@@ -600,7 +625,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
         ),
         const SizedBox(height: 16),
-        const Center(child: Text('Rytm Snu 2.12.1', style: TextStyle(color: C.muted, fontSize: 12))),
+        const Center(child: Text('Rytm Snu 2.13', style: TextStyle(color: C.muted, fontSize: 12))),
       ],
     );
   }

@@ -1,6 +1,7 @@
 import 'dart:math';
 
 import '../core/models.dart';
+import 'stage_model.dart';
 
 /// Wynik analizy nocy.
 class SleepSummary {
@@ -80,7 +81,10 @@ class SleepAnalysis {
   /// • Prior fizjologiczny: sen głęboki dominuje w pierwszej części nocy, REM w drugiej;
   ///   REM zwykle nie pojawia się w pierwszej godzinie po zaśnięciu.
   /// • Przejścia: fazy trwają minuty, nie skaczą co minutę (wygładzenie bez ręcznych reguł).
-  static SleepSummary analyze(List<MinuteSample> ms, {required int goalMin}) {
+  /// [model] — prawdopodobieństwa cech w fazach (domyślnie bieżący, ew. dostrojony z zegarka).
+  /// [watch] — fazy z zegarka na minutę (gdy był na ręce), łączone z danymi telefonu.
+  static SleepSummary analyze(List<MinuteSample> ms,
+      {required int goalMin, StageModel? model, List<int?>? watch}) {
     if (ms.isEmpty) {
       return const SleepSummary(
           inBedMin: 0, sleepMin: 0, deepMin: 0, lightMin: 0, remMin: 0, awakeMin: 0,
@@ -94,7 +98,7 @@ class SleepAnalysis {
       // zamiast „głębokiego snu przez całą noc” typowy przebieg cykli.
       st = _template(n);
     } else {
-      st = _decode(ms, mv);
+      st = _decode(ms, mv, model ?? StageModel.current, watch);
     }
 
     // Zaśnięcie i ostateczne przebudzenie z wyniku dekodowania
@@ -281,7 +285,13 @@ class SleepAnalysis {
   /// • płytki — pojedyncze, większe zmiany pozycji co kilka–kilkanaście minut,
   /// • REM — częstsze, drobne drgnięcia (zwykle w drugiej połowie nocy),
   /// • czuwanie — gęsty lub silny ruch.
-  static List<Stage> _decode(List<MinuteSample> ms, MovementSignal mv) {
+  /// Cechy minut do rozpoznawania faz; null, gdy brak użytecznego sygnału ruchu.
+  static (List<MinuteFeat>, int)? features(List<MinuteSample> ms) {
+    final mv = movementSignal(ms);
+    return mv == null ? null : _features(ms, mv);
+  }
+
+  static (List<MinuteFeat>, int) _features(List<MinuteSample> ms, MovementSignal mv) {
     final n = ms.length;
     final v = mv.values;
     final ev = [for (final x in v) x > mv.threshold];
@@ -336,36 +346,11 @@ class SleepAnalysis {
       return small ? 4 : 5;
     }
 
-    // P(kategoria | faza); kolejność faz = Stage.values: wake, rem, light, deep
-    //   bezruch≥25  bezruch≥10  rzadkie-drobne  rzadkie-duże  częste-drobne  częste-duże  czuwanie
-    const em = [
-      [0.01, 0.03, 0.03, 0.06, 0.07, 0.12, 0.68],
-      [0.03, 0.15, 0.22, 0.10, 0.33, 0.10, 0.07],
-      [0.17, 0.33, 0.14, 0.18, 0.05, 0.08, 0.05],
-      [0.70, 0.22, 0.04, 0.025, 0.005, 0.005, 0.005],
-    ];
-    const pSnore = [0.02, 0.06, 0.30, 0.38];
-    const pSound = [0.30, 0.06, 0.05, 0.01];
-    const pIrregular = [0.50, 0.45, 0.15, 0.06];
-    // Tempo oddechu (sonar) względem mediany nocy: wolne / typowe / szybkie.
-    // Sen głęboki — wolniej i równo, REM — szybciej.
-    const pRate = [
-      [0.15, 0.40, 0.45],
-      [0.10, 0.35, 0.55],
-      [0.25, 0.50, 0.25],
-      [0.55, 0.40, 0.05],
-    ];
     final rates = [for (final m in ms) if (m.breathRate != null) m.breathRate!]..sort();
     final medRate = rates.length >= 30 ? rates[rates.length ~/ 2] : null;
-    // Tętno z zegarka względem mediany nocy: niższe → głęboki, wyższe → REM/czuwanie.
-    const pHr = [
-      [0.10, 0.30, 0.60],
-      [0.12, 0.38, 0.50],
-      [0.25, 0.50, 0.25],
-      [0.55, 0.38, 0.07],
-    ];
     final hrs = [for (final m in ms) if (m.hr != null) m.hr!]..sort();
     final medHr = hrs.length >= 60 ? hrs[hrs.length ~/ 2] : null;
+    int b3(double rel) => rel < 0.95 ? 0 : (rel > 1.05 ? 2 : 1);
 
     var onset0 = 0;
     var run = 0;
@@ -376,28 +361,41 @@ class SleepAnalysis {
         break;
       }
     }
+    final feats = [
+      for (var i = 0; i < n; i++)
+        MinuteFeat(
+          cat(i),
+          ms[i].snore,
+          mv.source != 'dźwięk' ? ms[i].sounds > 0 : null,
+          ms[i].breathVar == null ? null : ms[i].breathVar! > 0.25,
+          (ms[i].hr != null && medHr != null) ? b3(ms[i].hr! / medHr) : null,
+          (ms[i].breathRate != null && medRate != null) ? b3(ms[i].breathRate! / medRate) : null,
+        )
+    ];
+    return (feats, onset0);
+  }
+
+  /// Jak bardzo ufamy fazie z zegarka: P(zegarek pokazał j | prawdziwa faza k).
+  static const _watchTrust = 0.72;
+
+  static List<Stage> _decode(List<MinuteSample> ms, MovementSignal mv, StageModel md, List<int?>? watch) {
+    final n = ms.length;
+    final (feats, onset0) = _features(ms, mv);
 
     final emis = List.generate(n, (i) {
-      final c = cat(i);
+      final f = feats[i];
       final sinceOnset = max(0, i - onset0);
       final t = sinceOnset / max(1, n - onset0);
       final out = List<double>.filled(4, 0);
+      final w = (watch != null && i < watch.length) ? watch[i] : null;
       for (var k = 0; k < 4; k++) {
-        var e = log(em[k][c]);
-        e += log(ms[i].snore ? pSnore[k] : 1 - pSnore[k]);
-        if (mv.source != 'dźwięk') e += log(ms[i].sounds > 0 ? pSound[k] : 1 - pSound[k]);
-        final bv = ms[i].breathVar;
-        if (bv != null) e += log(bv > 0.25 ? pIrregular[k] : 1 - pIrregular[k]);
-        final hr = ms[i].hr;
-        if (hr != null && medHr != null) {
-          final rel = hr / medHr;
-          e += log(pHr[k][rel < 0.95 ? 0 : (rel > 1.05 ? 2 : 1)]);
-        }
-        final br = ms[i].breathRate;
-        if (br != null && medRate != null) {
-          final rel = br / medRate;
-          e += log(pRate[k][rel < 0.95 ? 0 : (rel > 1.05 ? 2 : 1)]);
-        }
+        var e = log(md.em[k][f.cat]);
+        e += log(f.snore ? md.pSnore[k] : 1 - md.pSnore[k]);
+        if (f.sound != null) e += log(f.sound! ? md.pSound[k] : 1 - md.pSound[k]);
+        if (f.irregular != null) e += log(f.irregular! ? md.pIrregular[k] : 1 - md.pIrregular[k]);
+        if (f.hrBin != null) e += log(md.pHr[k][f.hrBin!]);
+        if (f.rateBin != null) e += log(md.pRate[k][f.rateBin!]);
+        if (w != null) e += log(w == k ? _watchTrust : (1 - _watchTrust) / 3);
         out[k] = e;
       }
       out[3] += log(0.25 + 1.5 * pow(1 - t, 2)); // głęboki: wcześnie

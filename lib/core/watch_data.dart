@@ -4,6 +4,7 @@ import 'dart:math';
 import 'package:bakometr_native/bakometr_native.dart';
 
 import '../engine/night_engine.dart';
+import '../engine/stage_model.dart';
 import 'bus.dart';
 import 'db.dart';
 import 'models.dart';
@@ -72,6 +73,7 @@ class WatchNight {
   /// Zwraca true, gdy coś zapisano.
   static Future<bool> applyToNight(Night n, WatchNight w) async {
     if (n.id == null || w.isEmpty) return false;
+    final stages = w.stages;
     final ms = await Db.instance.minutes(n.id!);
     if (w.hr.isNotEmpty && ms.isNotEmpty) {
       final byIdx = <int, double?>{};
@@ -112,8 +114,15 @@ class WatchNight {
       final hours = max(1, n.durationMin) / 60.0;
       n.odi = w.spo2.length >= 20 ? w.desaturations() / hours : null;
     }
+    // Fazy z zegarka — do łączenia z danymi telefonu, nauki modelu i oceny dokładności.
+    final wst = [
+      for (final (a, b, st) in stages)
+        if (watchStageIndex(st) != null && b.isAfter(a))
+          (a, 'wst', watchStageIndex(st)!.toDouble(), b.difference(a).inSeconds / 60.0)
+    ];
+    if (wst.isNotEmpty) await Db.instance.replaceExt(n.id!, 'wst', wst);
     await Db.instance.updateNight(n);
-    // Przeliczenie faz z tętnem
+    // Przeliczenie faz z tętnem i fazami z zegarka
     final fresh = await Db.instance.minutes(n.id!);
     final evs = await Db.instance.events(n.id!);
     await NightEngine.summarize(n, fresh, evs, push: false);
@@ -125,12 +134,21 @@ class WatchNight {
   static Future<int> backfillRecent({int days = 7}) async {
     if (!supported || !Settings.instance.watchData) return 0;
     var c = 0;
-    for (final n in await Db.instance.nights(limit: 14)) {
-      if (n.end == null || n.hrAvg != null || n.spo2Avg != null) continue;
-      if (DateTime.now().difference(n.start).inDays > days) continue;
+    // Jednorazowo: fazy z zegarka dla nocy z ostatnich 30 dni (do kalibracji).
+    final once = !Settings.instance.watchStagesBackfilled;
+    for (final n in await Db.instance.nights(limit: once ? 40 : 14)) {
+      if (n.end == null) continue;
+      final age = DateTime.now().difference(n.start).inDays;
+      if (once) {
+        if (age > 30) continue;
+      } else {
+        if (n.hrAvg != null || n.spo2Avg != null) continue;
+        if (age > days) continue;
+      }
       final w = await load(n);
       if (w != null && !w.isEmpty && await applyToNight(n, w)) c++;
     }
+    if (once) Settings.instance.watchStagesBackfilled = true;
     return c;
   }
 

@@ -1,3 +1,5 @@
+import 'sound_thresholds.dart';
+
 /// Typy wykrywanych zdarzeń dźwiękowych.
 enum SoundType { fart, snore, talk, cough, apnea, hypopnea }
 
@@ -304,7 +306,8 @@ class SoundEvent {
     this.verified,
   });
 
-  bool get counts => verified != false;
+  /// Liczy się do wyniku: ocena ręczna ma pierwszeństwo, potem wyuczony próg pewności.
+  bool get counts => verified ?? (confidence >= SoundThresholds.of(type.name));
 
   Map<String, Object?> toMap() => {
         if (id != null) 'id': id,

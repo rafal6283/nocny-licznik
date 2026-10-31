@@ -22,6 +22,7 @@ import '../core/night_log.dart';
 import '../core/settings.dart';
 import 'classifier.dart';
 import 'sleep_analysis.dart';
+import 'stage_model.dart';
 import 'sonar.dart';
 
 enum NightState { idle, tracking, ringing, snoozed, finishing }
@@ -914,7 +915,13 @@ class NightEngine extends ChangeNotifier {
 
   /// Liczy podsumowanie nocy i zapisuje je (używane też przy edycji zdarzeń).
   static Future<void> summarize(Night n, List<MinuteSample> ms, List<SoundEvent> evs, {bool push = true}) async {
-    final sum = SleepAnalysis.analyze(ms, goalMin: Settings.instance.sleepGoalMin);
+    // Fazy z zegarka (jeśli były) wchodzą do rozpoznawania faz jako dodatkowa, mocna wskazówka.
+    List<int?>? watch;
+    if (n.id != null) {
+      final rows = await Db.instance.ext(n.id!);
+      if (rows.any((r) => r.$2 == 'wst')) watch = watchStagesFor(ms, rows);
+    }
+    final sum = SleepAnalysis.analyze(ms, goalMin: Settings.instance.sleepGoalMin, watch: watch);
     n.stageSource = sum.source;
     n.inBedMin = n.end != null ? n.end!.difference(n.start).inMinutes : sum.inBedMin;
     n.durationMin = sum.sleepMin;
