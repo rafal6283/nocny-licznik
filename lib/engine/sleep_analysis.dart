@@ -166,31 +166,67 @@ class SleepAnalysis {
 
   /// Głębokość snu 0 (czuwanie) … 1 (głęboki) na minutę — do „fali” w stylu Sleep Cycle.
   /// Łączy fazę z wygładzoną aktywnością, żeby krzywa była płynna jak oddech nocy.
+  /// Wygładzanie gaussowskie z poprawną normalizacją na brzegach.
+  static List<double> _gauss(List<double> v, double sigma) {
+    final r = (sigma * 3).ceil();
+    final k = [for (var j = -r; j <= r; j++) exp(-(j * j) / (2 * sigma * sigma))];
+    return List.generate(v.length, (i) {
+      var acc = 0.0, ws = 0.0;
+      for (var j = -r; j <= r; j++) {
+        final x = i + j;
+        if (x < 0 || x >= v.length) continue;
+        acc += v[x] * k[j + r];
+        ws += k[j + r];
+      }
+      return ws == 0 ? v[i] : acc / ws;
+    });
+  }
+
+  /// Ciągła „głębokość snu” do wykresu (0 = czuwanie, 1 = sen głęboki).
+  /// Fazy wyznaczają poziom, ale wysokość krzywej pochodzi też z ciągłych danych
+  /// (gęstość ruchu w oknie kilkunastu minut, tętno), a przejścia są wygładzone
+  /// tak jak naturalne zapadanie się i wynurzanie ze snu (σ ≈ 7 min).
+  /// Przebudzenia zostają wyraźnymi, wąskimi szczytami.
   static List<double> depthCurve(List<MinuteSample> ms) {
     if (ms.isEmpty) return [];
+    final n = ms.length;
     final a = activity(ms);
-    final raw = <double>[];
-    for (var i = 0; i < ms.length; i++) {
-      final base = switch (ms[i].stage) {
-        Stage.wake => 0.04,
-        Stage.rem => 0.38,
-        Stage.light => 0.58,
-        Stage.deep => 0.92,
-      };
-      final act = (log(a[i] + 0.2) + 0.9) / 3.1; // ~0..1
-      raw.add((base - 0.12 * act.clamp(0.0, 1.0)).clamp(0.0, 1.0));
-    }
-    // wygładzenie gaussowskie σ≈3 min
-    const k = [0.05, 0.12, 0.2, 0.26, 0.2, 0.12, 0.05];
-    return List.generate(raw.length, (i) {
-      var acc = 0.0, ws = 0.0;
-      for (var j = 0; j < k.length; j++) {
-        final x = i + j - 3;
-        if (x < 0 || x >= raw.length) continue;
-        acc += raw[x] * k[j];
-        ws += k[j];
-      }
-      return acc / ws;
+
+    // 1) poziom z faz
+    final base = [
+      for (final m in ms)
+        switch (m.stage) {
+          Stage.wake => 0.30, // przebudzenia dorysowujemy osobno niżej
+          Stage.rem => 0.40,
+          Stage.light => 0.60,
+          Stage.deep => 0.92,
+        }
+    ];
+
+    // 2) ciągły sygnał: niepokój ruchowy w oknie ~kilkunastu minut
+    final act = [for (final x in a) ((log(x + 0.2) + 0.9) / 3.1).clamp(0.0, 1.0).toDouble()];
+    final restless = _gauss(act, 6);
+    final cont = [for (final r in restless) (0.95 - 0.9 * r).clamp(0.05, 0.95).toDouble()];
+
+    // 3) tętno z zegarka: niższe od mediany nocy = głębiej
+    final hrs = [for (final m in ms) if (m.hr != null) m.hr!];
+    final hrMed = hrs.length >= 60 ? _median(hrs) : null;
+    final hrSm = hrMed == null ? null : _gauss([for (final m in ms) m.hr ?? hrMed], 4);
+
+    final mix = List<double>.generate(n, (i) {
+      var d = 0.65 * base[i] + 0.35 * cont[i];
+      if (hrSm != null) d -= ((hrSm[i] - hrMed!) / 10).clamp(-1.0, 1.0) * 0.06;
+      return d.clamp(0.08, 0.97).toDouble();
+    });
+
+    // 4) łagodne przejścia między fazami
+    final smooth = _gauss(mix, 7);
+
+    // 5) przebudzenia: wąskie, wyraźne szczyty do poziomu czuwania
+    final wake = _gauss([for (final m in ms) m.stage == Stage.wake ? 1.0 : 0.0], 1.6);
+    return List.generate(n, (i) {
+      final w = (wake[i] * 1.7).clamp(0.0, 1.0);
+      return (smooth[i] * (1 - w) + 0.03 * w).clamp(0.0, 1.0).toDouble();
     });
   }
 
