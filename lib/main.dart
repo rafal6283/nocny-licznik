@@ -6,6 +6,8 @@ import 'core/cloud.dart';
 import 'core/calibration.dart';
 import 'core/settings.dart';
 import 'core/watch_data.dart';
+import 'core/bus.dart';
+import 'core/widget_sync.dart';
 import 'core/weather.dart';
 import 'engine/night_engine.dart';
 import 'ui/alarm_screen.dart';
@@ -95,6 +97,9 @@ class _BakometrAppState extends State<BakometrApp> {
       // kopia/podgląd Koofr — w tle, bez wpływu na start
       unawaited(Future.delayed(const Duration(seconds: 5), Cloud.autoRun));
       unawaited(Cloud.init().then((_) => Cloud.startBackground()));
+      // widżet na ekranie głównym: po starcie i po każdej zmianie danych (np. koniec nocy)
+      unawaited(updateSleepWidget());
+      dataVersion.addListener(() => unawaited(updateSleepWidget()));
       setState(() => ready = true);
     } catch (_) {
       setState(() => step = 'Start nie powiódł się');

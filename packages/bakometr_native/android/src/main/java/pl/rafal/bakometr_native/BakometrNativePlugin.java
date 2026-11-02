@@ -153,6 +153,12 @@ public class BakometrNativePlugin implements FlutterPlugin, MethodChannel.Method
             case "measureLux":
                 measureLux(result);
                 break;
+            case "updateWidget": {
+                SleepWidget.update(ctx, str(call.argument("score")), str(call.argument("sleep")),
+                        str(call.argument("extra")), str(call.argument("date")));
+                result.success(null);
+                break;
+            }
             case "vibrate": {
                 Integer ms = call.argument("ms");
                 Vibrator v = (Vibrator) ctx.getSystemService(Context.VIBRATOR_SERVICE);
@@ -320,5 +326,9 @@ public class BakometrNativePlugin implements FlutterPlugin, MethodChannel.Method
     @Override
     public void onDetachedFromActivity() {
         detach();
+    }
+
+    private static String str(Object o) {
+        return o == null ? "" : o.toString();
     }
 }

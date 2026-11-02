@@ -34,6 +34,16 @@
             android:name="pl.rafal.bakometr_native.ReminderReceiver"
             android:exported="false" />
 
+        <receiver
+            android:name="pl.rafal.bakometr_native.SleepWidget"
+            android:exported="false"
+            android:label="Rytm Snu">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/rytm_widget_info" />
+        </receiver>
+
         <!-- Health Connect: ekran z wyjaśnieniem uprawnień (Android 9–13) … -->
         <activity
             android:name="pl.rafal.bakometr_native.HealthRationaleActivity"

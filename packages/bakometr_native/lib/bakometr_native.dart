@@ -76,6 +76,10 @@ class BakometrNative {
     }
   }
 
+  /// Widżet na ekranie głównym (Android).
+  static Future<void> updateWidget({required String score, required String sleep, String extra = '', String date = ''}) =>
+      _safe(() => _ch.invokeMethod('updateWidget', {'score': score, 'sleep': sleep, 'extra': extra, 'date': date}));
+
   static Future<void> vibrate(int ms) => _safe(() => _ch.invokeMethod('vibrate', {'ms': ms}));
 
   static Future<void> scheduleNotification({
