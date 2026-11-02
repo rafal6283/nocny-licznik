@@ -121,11 +121,15 @@ class _TrackingScreenState extends State<TrackingScreen> {
               const SizedBox(width: 8),
               _pill('😷 CPAP', C.muted),
             ],
-            if (Strap.instance.status.value != null) ...[
+            if (Strap.instance.configured) ...[
               const SizedBox(width: 8),
-              ValueListenableBuilder<int?>(
-                valueListenable: Strap.instance.lastHr,
-                builder: (_, hr, __) => _pill(hr == null ? '♥ ${Strap.instance.status.value ?? ''}' : '♥ $hr', const Color(0xFFFF6B8A)),
+              ValueListenableBuilder<String?>(
+                valueListenable: Strap.instance.status,
+                builder: (_, st, __) => ValueListenableBuilder<int?>(
+                  valueListenable: Strap.instance.lastHr,
+                  builder: (_, hr, __) => _pill(
+                      hr != null ? '♥ $hr' : '♥ ${st ?? 'opaska…'}', hr != null ? const Color(0xFFFF6B8A) : C.muted),
+                ),
               ),
             ],
             const SizedBox(width: 8),

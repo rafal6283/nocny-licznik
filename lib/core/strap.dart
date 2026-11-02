@@ -10,6 +10,7 @@ import '../engine/night_engine.dart';
 import 'bus.dart';
 import 'db.dart';
 import 'models.dart';
+import 'night_log.dart';
 import 'settings.dart';
 import '../engine/strap_minute.dart';
 import 'strap_analysis.dart';
@@ -77,19 +78,60 @@ class Strap {
     try {
       _sink = (await fileFor(nightId)).openWrite(mode: FileMode.append);
       final dev = _dev = BluetoothDevice.fromId(Settings.instance.strapId);
-      status.value = 'łączenie z opaską…';
       _connSub = dev.connectionState.listen((s) {
-        if (s == BluetoothConnectionState.connected) {
-          unawaited(_setup(dev));
-        } else if (s == BluetoothConnectionState.disconnected && _nightId != null) {
-          status.value = 'opaska rozłączona – czekam';
-          lastHr.value = null;
-        }
+        if (s == BluetoothConnectionState.connected) unawaited(_setup(dev));
       });
-      // autoConnect: Android sam łączy ponownie, gdy opaska wróci w zasięg (np. po zdjęciu i założeniu)
-      await dev.connect(license: License.nonprofit, autoConnect: true, mtu: null);
+      unawaited(_connectLoop(dev, nightId));
     } catch (e) {
-      status.value = 'opaska: $e';
+      _st('opaska: $e');
+    }
+  }
+
+  void _st(String s) {
+    if (status.value == s) return;
+    status.value = s;
+    unawaited(NightLog.add(_nightId, 'OPASKA: $s'));
+  }
+
+  /// Łączenie i ponawianie przez całą noc. Android łączy pewnie dopiero z urządzeniem widzianym
+  /// w świeżym skanie (zna wtedy typ adresu), więc przed każdą próbą krótko szukamy opaski.
+  Future<void> _connectLoop(BluetoothDevice dev, int nightId) async {
+    var tries = 0;
+    while (_nightId == nightId) {
+      try {
+        if (!dev.isConnected) {
+          if (Platform.isAndroid && FlutterBluePlus.adapterStateNow != BluetoothAdapterState.on) {
+            try {
+              await FlutterBluePlus.turnOn();
+            } catch (_) {}
+          }
+          if (FlutterBluePlus.adapterStateNow == BluetoothAdapterState.off) {
+            _st('Bluetooth wyłączony');
+          } else {
+            _st(tries == 0 ? 'szukam opaski…' : 'opaska niedostępna – ponawiam');
+            try {
+              await FlutterBluePlus.startScan(withRemoteIds: [dev.remoteId.str], timeout: const Duration(seconds: 8));
+              await FlutterBluePlus.isScanning.where((x) => !x).first.timeout(const Duration(seconds: 12));
+            } catch (_) {}
+            if (_nightId != nightId) break;
+            _st('łączenie z opaską…');
+            // także gdy skan jej nie widział: połączona z innym telefonem/aplikacją opaska może nie nadawać
+            await dev.connect(license: License.nonprofit, timeout: const Duration(seconds: 20), mtu: null);
+            tries = 0;
+          }
+        }
+        if (dev.isConnected) {
+          await dev.connectionState.where((x) => x == BluetoothConnectionState.disconnected).first;
+          if (_nightId != nightId) break;
+          lastHr.value = null;
+          _st('opaska rozłączona – ponawiam');
+        }
+      } catch (e) {
+        tries++;
+        if (tries == 1 || tries % 10 == 0) unawaited(NightLog.add(nightId, 'OPASKA błąd: $e'));
+      }
+      if (_nightId != nightId) break;
+      await Future<void>.delayed(Duration(seconds: tries == 0 ? 3 : (tries < 6 ? 15 : 60)));
     }
   }
 
@@ -99,16 +141,16 @@ class Strap {
       final svc = services.where((s) => s.uuid == _hrService).firstOrNull;
       final ch = svc?.characteristics.where((c) => c.uuid == _hrChar).firstOrNull;
       if (ch == null) {
-        status.value = 'opaska nie podaje tętna';
+        _st('opaska nie podaje tętna');
         return;
       }
       await _valSub?.cancel();
       _valSub = ch.onValueReceived.listen(_onValue);
       await ch.setNotifyValue(true);
-      status.value = 'opaska połączona';
+      _st('opaska połączona');
       await _startAcc(dev, services);
     } catch (e) {
-      status.value = 'opaska: $e';
+      _st('opaska: $e');
     }
   }
 
@@ -148,9 +190,9 @@ class Strap {
       final r = await resp.future.timeout(const Duration(seconds: 5), onTimeout: () => const [0xF0, 0, 0, 0]);
       await sub.cancel();
       _accStartedByUs = r[3] == 0; // 6 = pomiar już trwa (np. Polar EKG) – nie zatrzymujemy go potem
-      status.value = 'opaska połączona · tętno i ruch';
+      _st('opaska połączona · tętno i ruch');
     } catch (e) {
-      status.value = 'opaska połączona (bez akcelerometru)';
+      _st('opaska połączona (bez akcelerometru)');
     }
   }
 
@@ -163,11 +205,52 @@ class Strap {
     _sink?.writeln('$t,${m.$1},${m.$2.map((x) => x.round()).join(';')}');
   }
 
+  /// Próba połączenia z ustawień: (tętno albo null, opis). Nie w trakcie nocy.
+  Future<(int?, String)> test() async {
+    if (_nightId != null) return (lastHr.value, status.value ?? 'noc w toku');
+    final id = Settings.instance.strapId;
+    if (id.isEmpty) return (null, 'nie wybrano opaski');
+    final dev = BluetoothDevice.fromId(id);
+    try {
+      if (Platform.isAndroid && FlutterBluePlus.adapterStateNow != BluetoothAdapterState.on) await FlutterBluePlus.turnOn();
+      try {
+        await FlutterBluePlus.startScan(withRemoteIds: [id], timeout: const Duration(seconds: 6));
+        await FlutterBluePlus.isScanning.where((x) => !x).first.timeout(const Duration(seconds: 10));
+      } catch (_) {}
+      await dev.connect(license: License.nonprofit, timeout: const Duration(seconds: 20), mtu: null);
+      final services = await dev.discoverServices();
+      final ch = services.where((s) => s.uuid == _hrService).firstOrNull?.characteristics.where((c) => c.uuid == _hrChar).firstOrNull;
+      if (ch == null) return (null, 'połączono, ale opaska nie podaje tętna');
+      final got = Completer<int>();
+      final sub = ch.onValueReceived.listen((v) {
+        final m = parseHeartRate(v);
+        if (m != null && m.$1 > 0 && !got.isCompleted) got.complete(m.$1);
+      });
+      await ch.setNotifyValue(true);
+      final hr = await got.future.timeout(const Duration(seconds: 15), onTimeout: () => -1);
+      await sub.cancel();
+      final pmd = services.any((s) => s.uuid == _pmdService);
+      return hr < 0
+          ? (null, 'połączono, ale brak tętna – zwilż elektrody i załóż opaskę')
+          : (hr, 'działa · tętno $hr${pmd ? ' · akcelerometr dostępny' : ''}');
+    } catch (e) {
+      return (null, 'nie udało się połączyć: $e');
+    } finally {
+      try {
+        await dev.disconnect();
+      } catch (_) {}
+    }
+  }
+
   /// Koniec nocy: rozłączenie i zamknięcie pliku.
   Future<void> stop() async {
     final id = _nightId;
-    _nightId = null;
     if (id == null) return;
+    unawaited(NightLog.add(id, 'OPASKA: koniec nocy · ${accActive ? 'z akcelerometrem' : 'bez akcelerometru'}'));
+    _nightId = null;
+    try {
+      await FlutterBluePlus.stopScan();
+    } catch (_) {}
     if (_accStartedByUs) {
       try {
         await _pmdCtl?.write(pmdStopAcc);

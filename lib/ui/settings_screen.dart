@@ -17,6 +17,7 @@ import '../core/health_sync.dart';
 import '../core/reminders.dart';
 import '../core/resmed_import.dart';
 import '../core/settings.dart';
+import '../core/strap.dart';
 import '../core/weather.dart';
 import 'cloud_screen.dart';
 import 'accuracy_screen.dart';
@@ -300,6 +301,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     setState(() => s.watchData = true);
     _snack('Gotowe. Dane z zegarka zobaczysz w szczegółach każdej nocy');
   }
+
+  bool _strapTesting = false;
+  String? _strapTest;
 
   Future<void> _pickStrap() async {
     final picked = await showDialog<(String, String)>(context: context, builder: (_) => const StrapPicker());
@@ -604,6 +608,30 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 trailing: const Icon(Icons.bluetooth_searching),
                 onTap: _pickStrap,
               ),
+            if (s.strapId.isNotEmpty)
+              ListTile(
+                contentPadding: const EdgeInsets.only(left: 72, right: 16),
+                title: const Text('Sprawdź połączenie'),
+                subtitle: _strapTest == null ? null : Text(_strapTest!),
+                trailing: _strapTesting
+                    ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                    : const Icon(Icons.favorite_border),
+                onTap: _strapTesting
+                    ? null
+                    : () async {
+                        setState(() {
+                          _strapTesting = true;
+                          _strapTest = 'łączenie…';
+                        });
+                        final r = await Strap.instance.test();
+                        if (mounted) {
+                          setState(() {
+                            _strapTesting = false;
+                            _strapTest = r.$2;
+                          });
+                        }
+                      },
+              ),
             const ListTile(
               leading: Icon(Icons.lock_outline),
               title: Text('Prywatność'),
@@ -660,7 +688,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
         ),
         const SizedBox(height: 16),
-        const Center(child: Text('Rytm Snu 2.16', style: TextStyle(color: C.muted, fontSize: 12))),
+        const Center(child: Text('Rytm Snu 2.17', style: TextStyle(color: C.muted, fontSize: 12))),
       ],
     );
   }
