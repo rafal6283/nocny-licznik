@@ -43,3 +43,36 @@ class FadeThroughPageRoute<T> extends PageRouteBuilder<T> {
           },
         );
 }
+
+/// Kaskadowe wejście elementów listy (np. `ListView(children: staggered([...]))`).
+List<Widget> staggered(List<Widget> children, {int from = 0}) =>
+    [for (var i = 0; i < children.length; i++) FadeSlideIn(index: from + i, child: children[i])];
+
+/// Pasek proporcji (np. w normie / poza normą), który rośnie przy pokazaniu.
+class AnimatedSplitBar extends StatelessWidget {
+  final List<(double, Color)> parts;
+  final double height;
+  const AnimatedSplitBar({super.key, required this.parts, this.height = 8});
+
+  @override
+  Widget build(BuildContext context) {
+    final total = parts.fold<double>(0, (a, p) => a + p.$1);
+    if (total <= 0) return SizedBox(height: height);
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0, end: 1),
+      duration: const Duration(milliseconds: 900),
+      curve: Curves.easeOutCubic,
+      builder: (context, t, _) => ClipRRect(
+        borderRadius: BorderRadius.circular(height),
+        child: SizedBox(
+          height: height,
+          child: LayoutBuilder(
+            builder: (context, c) => Row(children: [
+              for (final p in parts) Container(width: c.maxWidth * t * p.$1 / total, color: p.$2),
+            ]),
+          ),
+        ),
+      ),
+    );
+  }
+}
