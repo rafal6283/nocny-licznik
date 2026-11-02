@@ -242,6 +242,16 @@ class Db {
     await b.commit(noResult: true);
   }
 
+  /// Dane opaski dla minut: idx → (tętno, HRV, ruch tułowia).
+  Future<void> setMinuteStrap(int nightId, Map<int, (double?, double?, int?)> byIdx) async {
+    final b = (await db).batch();
+    for (final e in byIdx.entries) {
+      b.update('minutes', {'hr': e.value.$1, 'hrv': e.value.$2, 'strap_act': e.value.$3},
+          where: 'night_id = ? AND idx = ?', whereArgs: [nightId, e.key]);
+    }
+    await b.commit(noResult: true);
+  }
+
   // ---- noce ----
   Future<int> insertNight(Night n) async => (await db).insert('nights', n.toMap());
 

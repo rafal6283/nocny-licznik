@@ -1,3 +1,4 @@
+import 'dart:math';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -369,5 +370,80 @@ class PolarAf {
     } catch (_) {
       return const [];
     }
+  }
+}
+
+/// Noce z Polar EKG (plik „noc-polar” z Koofr): gdy w nocy opaska była połączona tylko z Polar EKG,
+/// Rytm Snu bierze stamtąd tętno, HRV, ruch tułowia, pobudzenia dodatkowe i pauzy.
+class PolarNights {
+  static Future<File> _file() async => File('${(await getApplicationDocumentsDirectory()).path}/polar_noce.json');
+
+  static Future<void> save(List<int> data) async => (await _file()).writeAsBytes(data, flush: true);
+
+  /// Uzupełnia noce z ostatnich 21 dni bez własnych danych z opaski. Zwraca liczbę uzupełnionych nocy.
+  static Future<int> applyAll() async {
+    final f = await _file();
+    if (!await f.exists()) return 0;
+    List<Map> recs;
+    try {
+      final j = jsonDecode(await f.readAsString());
+      if (j is! Map || j['format'] != 'noc-polar') return 0;
+      recs = (j['recordings'] as List? ?? const []).whereType<Map>().toList();
+    } catch (_) {
+      return 0;
+    }
+    if (recs.isEmpty) return 0;
+    final since = DateTime.now().subtract(const Duration(days: 21));
+    var done = 0;
+    for (final n in await Db.instance.nights(limit: 40)) {
+      if (n.id == null || n.end == null || n.start.isBefore(since)) continue;
+      if (NightEngine.instance.night?.id == n.id) continue;
+      final ext = await Db.instance.ext(n.id!);
+      if (ext.any((r) => r.$2 == 'h10pe')) continue; // już uzupełniona z Polar EKG
+      final ms = await Db.instance.minutes(n.id!);
+      if (ms.isEmpty || ms.any((m) => m.hrv != null || m.strapAct != null)) continue; // własna opaska
+      final a = n.start.millisecondsSinceEpoch, b = n.end!.millisecondsSinceEpoch;
+      final rows = <int, List>{}; // minuta (od epoki) → wiersz
+      final pauses = <(DateTime, double)>[];
+      for (final r in recs) {
+        if ((r['start'] as num) >= b || (r['end'] as num) <= a) continue;
+        for (final row in (r['minutes'] as List? ?? const []).whereType<List>()) {
+          rows[(row[0] as num).toInt() ~/ 60000] = row;
+        }
+        for (final p in (r['pauses'] as List? ?? const []).whereType<List>()) {
+          final t = (p[0] as num).toInt();
+          if (t >= a && t <= b) pauses.add((DateTime.fromMillisecondsSinceEpoch(t), (p[1] as num).toDouble()));
+        }
+      }
+      if (rows.isEmpty) continue;
+      final byIdx = <int, (double?, double?, int?)>{};
+      final ect = <(DateTime, double)>[];
+      for (final m in ms) {
+        final k = m.ts.millisecondsSinceEpoch ~/ 60000;
+        final row = rows[k] ?? rows[k + 1] ?? rows[k - 1];
+        if (row == null) continue;
+        byIdx[m.idx] = ((row[1] as num?)?.toDouble(), (row[2] as num?)?.toDouble(), (row[3] as num?)?.toInt());
+        final sv = ((row[4] as num?) ?? 0) + ((row[5] as num?) ?? 0);
+        if (sv > 0) ect.add((m.ts, sv.toDouble()));
+      }
+      if (byIdx.length < 0.5 * ms.length) continue; // za mało wspólnego czasu
+      await Db.instance.setMinuteStrap(n.id!, byIdx);
+      await Db.instance.replaceExt(n.id!, 'h10', [
+        (n.start, 'h10pe', null, null),
+        for (final (t, s) in pauses) (t, 'h10pa', s, null),
+        for (final (t, c) in ect) (t, 'h10pv', c, null),
+      ]);
+      final hrs = [for (final v in byIdx.values) if (v.$1 != null) v.$1!];
+      if (hrs.isNotEmpty) {
+        n.hrAvg = hrs.reduce((x, y) => x + y) / hrs.length;
+        n.hrMin = hrs.reduce(min);
+      }
+      await Db.instance.updateNight(n);
+      final fresh = await Db.instance.minutes(n.id!);
+      await NightEngine.summarize(n, fresh, await Db.instance.events(n.id!), push: false);
+      done++;
+    }
+    if (done > 0) dataChanged();
+    return done;
   }
 }

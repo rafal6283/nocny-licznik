@@ -169,13 +169,18 @@ class Cloud {
       await sync.removeExchange('rytm-snu');
       msg = 'licznik FF wyłączony';
     }
-    // napady AF z Polar EKG – na wykres nocy (tętno i rytm)
+    // napady AF i noce z Polar EKG – na wykres nocy (tętno i rytm); w tle tylko wysyłamy
     try {
-      final got = await sync.pullExchange((n) => n == 'polar-ekg', (name, data) => PolarAf.save(data), force: force);
+      if (_background) throw StateError('w tle bez pobierania');
+      final got = await sync.pullExchange((n) => n == 'polar-ekg' || n == 'polar-noce',
+          (name, data) => name == 'polar-noce' ? PolarNights.save(data) : PolarAf.save(data),
+          force: force);
       if (got.isNotEmpty) {
-        msg = '$msg · pobrano AF z Polar EKG';
+        msg = '$msg · pobrano z Polar EKG';
         dataChanged();
       }
+      final filled = await PolarNights.applyAll();
+      if (filled > 0) msg = '$msg · noce uzupełnione danymi z opaski: $filled';
     } catch (_) {}
     // sen dla Polar EKG (co poprzedza napady AF) – bez wiatrów
     try {

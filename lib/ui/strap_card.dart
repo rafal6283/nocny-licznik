@@ -27,6 +27,8 @@ class StrapCard extends StatelessWidget {
     final irr = [for (final r in ext) if (r.$2 == 'h10af') (r.$1, r.$1.add(Duration(seconds: ((r.$4 ?? 0) * 60).round())))];
     final pauses = [for (final r in ext) if (r.$2 == 'h10pa') (r.$1, r.$3 ?? 2)];
     final ect = [for (final r in ext) if (r.$2 == 'h10pv') r.$1];
+    final ectN = ext.where((r) => r.$2 == 'h10pv').fold<int>(0, (s, r) => s + (r.$3 ?? 1).round());
+    final fromPolar = ext.any((r) => r.$2 == 'h10pe');
     final posCh = ext.where((r) => r.$2 == 'h10po').length;
     final hrvs = [for (final m in minutes) if (m.hrv != null) m.hrv!]..sort();
     final hrvMed = hrvs.isEmpty ? null : hrvs[hrvs.length ~/ 2];
@@ -60,7 +62,7 @@ class StrapCard extends StatelessWidget {
           StatTile(label: 'Tętno śr.', value: night.hrAvg == null ? '—' : '${night.hrAvg!.round()}', color: _hrColor),
           StatTile(label: 'Tętno min.', value: night.hrMin == null ? '—' : '${night.hrMin!.round()}', color: _hrColor),
           StatTile(label: 'Pauzy ≥ 2 s', value: '${pauses.length}', sub: longest == null ? null : 'maks. ${longest.toStringAsFixed(1)} s', color: _pauseColor),
-          StatTile(label: 'Pobudzenia dodatkowe', value: '${ect.length}', color: _ectColor),
+          StatTile(label: 'Pobudzenia dodatkowe', value: '$ectN', sub: fromPolar ? 'z EKG' : null, color: _ectColor),
           StatTile(label: 'Nieregularny rytm', value: durHM(irrMin), color: _irrColor),
           StatTile(label: 'AF (Polar EKG)', value: af.isEmpty ? '—' : durHM(afMin), color: _afColor),
           StatTile(label: 'HRV (RMSSD)', value: hrvMed == null ? '—' : '${hrvMed.round()} ms', sub: 'mediana nocy'),
@@ -74,7 +76,7 @@ class StrapCard extends StatelessWidget {
         const SizedBox(height: 8),
         Text(
           hasStrap
-              ? 'Tętno, HRV, ruch tułowia i oddech z opaski wchodzą do rozpoznawania faz snu. '
+              ? '${fromPolar ? 'Dane z Polar EKG (opaska była połączona z nim): ' : ''}Tętno, HRV, ruch tułowia i oddech z opaski wchodzą do rozpoznawania faz snu. '
                   'Rytm z odstępów RR: nieregularny rytm to przesiew – potwierdza go EKG. '
                   'Pojedyncze pobudzenia dodatkowe i krótkie pauzy we śnie zdarzają się u zdrowych osób.'
               : 'Brak danych z opaski tej nocy. Wybierz opaskę w Ustawieniach → Opaska na klatkę piersiową.',
