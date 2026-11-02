@@ -1,0 +1,16 @@
+name: rodzina_wykresy
+description: Wspólne interaktywne wykresy i animacje rodzinnych aplikacji Flutter (linia z dymkiem, słupki, koło, kalendarz, animowane liczby).
+version: 1.0.0
+publish_to: 'none'
+
+environment:
+  sdk: ">=3.6.0 <4.0.0"
+  flutter: ">=3.27.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
