@@ -3,6 +3,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 
 import '../core/fmt.dart';
+import '../core/body_position.dart';
 import '../core/models.dart';
 import 'theme.dart';
 
@@ -33,6 +34,18 @@ class StrapCard extends StatelessWidget {
     final hrvs = [for (final m in minutes) if (m.hrv != null) m.hrv!]..sort();
     final hrvMed = hrvs.isEmpty ? null : hrvs[hrvs.length ~/ 2];
     final hasAcc = minutes.any((m) => m.strapAct != null);
+    // pozycja ciała: minuty, przerwy w oddechu i chrapanie w każdej pozycji
+    final ps = PositionStats();
+    final byMin = {for (final m in minutes) m.ts.millisecondsSinceEpoch ~/ 60000: m};
+    for (final r in ext) {
+      if (r.$2 != 'h10ps' || r.$3 == null) continue;
+      final k = r.$1.millisecondsSinceEpoch ~/ 60000;
+      final m = byMin[k] ?? byMin[k - 1] ?? byMin[k + 1];
+      ps.add(BodyPos.values[r.$3!.round().clamp(0, BodyPos.values.length - 1)], apnea: m?.apneas ?? 0, snoring: m?.snore ?? false);
+    }
+    final posList = [for (final p in BodyPos.values) if ((ps.minutes[p] ?? 0) > 0) p]
+      ..sort((a, b) => (ps.minutes[b] ?? 0).compareTo(ps.minutes[a] ?? 0));
+    final posTotal = ps.minutes.values.fold<int>(0, (a, b) => a + b);
     final af = [
       for (final (a, b) in polarAf)
         if (a.isBefore(end) && b.isAfter(night.start)) (a.isBefore(night.start) ? night.start : a, b.isAfter(end) ? end : b)
@@ -73,6 +86,46 @@ class StrapCard extends StatelessWidget {
                 value: durHM(minutes.where((m) => m.strapAct == 0).length),
                 sub: 'z ${durHM(minutes.where((m) => m.strapAct != null).length)}'),
         ]),
+        if (posList.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          const Text('Pozycja ciała', style: TextStyle(fontWeight: FontWeight.w600)),
+          const SizedBox(height: 6),
+          for (final p in posList)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 3),
+              child: Row(children: [
+                SizedBox(width: 110, child: Text(p.label, style: const TextStyle(fontSize: 13))),
+                Expanded(
+                  child: TweenAnimationBuilder<double>(
+                    tween: Tween(begin: 0, end: (ps.minutes[p] ?? 0) / posTotal),
+                    duration: const Duration(milliseconds: 800),
+                    curve: Curves.easeOutCubic,
+                    builder: (_, v, __) => ClipRRect(
+                      borderRadius: BorderRadius.circular(4),
+                      child: LinearProgressIndicator(value: v, minHeight: 8, color: p == BodyPos.back ? _irrColor : C.light, backgroundColor: C.surface2),
+                    ),
+                  ),
+                ),
+                SizedBox(
+                  width: 120,
+                  child: Text(
+                    '${durHM(ps.minutes[p] ?? 0)}'
+                    '${ps.apneaIndex(p) != null ? ' · ${ps.apneaIndex(p)!.toStringAsFixed(1)}/h' : ''}'
+                    '${(ps.snorePct(p) ?? 0) >= 1 ? ' · 😴${ps.snorePct(p)!.round()}%' : ''}',
+                    textAlign: TextAlign.right,
+                    style: const TextStyle(fontSize: 11, color: C.muted),
+                  ),
+                ),
+              ]),
+            ),
+          const SizedBox(height: 4),
+          const Text('Czas w pozycji · przerwy w oddechu na godzinę · udział chrapania. Jeśli na plecach jest ich wyraźnie więcej, '
+              'pomaga spanie na boku (w Ustawieniach: zachęta wibracją).', style: TextStyle(fontSize: 11, color: C.muted)),
+        ] else if (hasAcc) ...[
+          const SizedBox(height: 8),
+          const Text('Skalibruj pozycje w Ustawieniach → Opaska, żeby zobaczyć, ile śpisz na plecach i na boku.',
+              style: TextStyle(fontSize: 11, color: C.muted)),
+        ],
         const SizedBox(height: 8),
         Text(
           hasStrap

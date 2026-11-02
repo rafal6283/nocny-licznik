@@ -155,6 +155,14 @@ class Settings extends ChangeNotifier {
   set strapId(String v) => _set('strapId', v);
   String get strapName => _s('strapName', '');
   set strapName(String v) => _set('strapName', v);
+  /// Kalibracja pozycji (kierunek grawitacji „x,y,z”): leżąc na plecach i na prawym boku.
+  String get strapBack => _s('strapBack', '');
+  set strapBack(String v) => _set('strapBack', v);
+  String get strapRight => _s('strapRight', '');
+  set strapRight(String v) => _set('strapRight', v);
+  /// Delikatna wibracja telefonu przy chrapaniu / przerwie w oddechu na plecach (zachęta do obrotu).
+  bool get positionNudge => _b('positionNudge', false);
+  set positionNudge(bool v) => _set('positionNudge', v);
 
   bool get watchData => _b('watchData', false);
   set watchData(bool v) => _set('watchData', v);

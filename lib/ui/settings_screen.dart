@@ -305,6 +305,39 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _strapTesting = false;
   String? _strapTest;
 
+  Future<void> _calibratePosition() async {
+    for (final (key, label) in [('back', 'na plecach'), ('right', 'na prawym boku')]) {
+      final go = await showDialog<bool>(
+        context: context,
+        builder: (c) => AlertDialog(
+          title: Text('Połóż się $label'),
+          content: const Text('Z założoną opaską. Po naciśnięciu „Mierz” leż bez ruchu ok. 10 sekund.'),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Anuluj')),
+            FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('Mierz')),
+          ],
+        ),
+      );
+      if (go != true || !mounted) return;
+      _snack('Mierzę – leż spokojnie…');
+      final g = await Strap.instance.sampleGravity();
+      if (!mounted) return;
+      if (g == null) {
+        _snack('Nie udało się odczytać akcelerometru opaski (potrzebny Polar H10 i połączenie)');
+        return;
+      }
+      final v = g.map((x) => x.toStringAsFixed(1)).join(',');
+      setState(() {
+        if (key == 'back') {
+          s.strapBack = v;
+        } else {
+          s.strapRight = v;
+        }
+      });
+    }
+    _snack('Gotowe – pozycja ciała będzie liczona od następnej nocy');
+  }
+
   Future<void> _pickStrap() async {
     final picked = await showDialog<(String, String)>(context: context, builder: (_) => const StrapPicker());
     if (picked == null) return;
@@ -632,6 +665,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         }
                       },
               ),
+            if (s.strapId.isNotEmpty)
+              ListTile(
+                contentPadding: const EdgeInsets.only(left: 72, right: 16),
+                title: const Text('Kalibracja pozycji ciała'),
+                subtitle: Text(Strap.instance.calibrated
+                    ? 'Skalibrowano – w szczegółach nocy widać czas na plecach i na boku'
+                    : 'Polar H10: połóż się na plecach, potem na prawym boku (po 6 s)'),
+                trailing: const Icon(Icons.accessibility_new),
+                onTap: _calibratePosition,
+              ),
+            if (s.strapId.isNotEmpty && Strap.instance.calibrated)
+              SwitchListTile(
+                contentPadding: const EdgeInsets.only(left: 72, right: 16),
+                title: const Text('Zachęta do spania na boku'),
+                subtitle: const Text('Dwie krótkie wibracje telefonu, gdy na plecach chrapiesz albo pojawia się przerwa w oddechu (nie częściej niż co 5 min)'),
+                value: s.positionNudge,
+                onChanged: (v) => setState(() => s.positionNudge = v),
+              ),
             const ListTile(
               leading: Icon(Icons.lock_outline),
               title: Text('Prywatność'),
@@ -688,7 +739,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
         ),
         const SizedBox(height: 16),
-        const Center(child: Text('Rytm Snu 2.18', style: TextStyle(color: C.muted, fontSize: 12))),
+        const Center(child: Text('Rytm Snu 2.19', style: TextStyle(color: C.muted, fontSize: 12))),
       ],
     );
   }

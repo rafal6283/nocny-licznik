@@ -20,6 +20,7 @@ import '../core/weather.dart';
 import '../core/models.dart';
 import '../core/night_log.dart';
 import '../core/settings.dart';
+import '../core/body_position.dart';
 import '../core/strap.dart';
 import 'classifier.dart';
 import 'accel_breath.dart';
@@ -468,6 +469,7 @@ class NightEngine extends ChangeNotifier {
       hypopneas++;
     }
     _minApneas++;
+    _positionNudge(DateTime.now());
     final saved = _clipsSaved[type] ?? 0;
     final withClip = _s.recordClips && saved < (_clipLimits[type] ?? 40);
     final back = min(_ringLen - _sr, (e.seconds + 4) * _sr);
@@ -649,6 +651,7 @@ class NightEngine extends ChangeNotifier {
   void _apneaHit(_ApneaCandidate c, double conf, DateTime now) {
     apneas++;
     _minApneas++;
+    _positionNudge(now);
     final saved = _clipsSaved[SoundType.apnea] ?? 0;
     final withClip = _s.recordClips && saved < (_clipLimits[SoundType.apnea] ?? 60);
     final gapSec = (c.gapEnd - c.gapStart) / _sr;
@@ -657,7 +660,20 @@ class NightEngine extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Na plecach (opaska skalibrowana): chrapanie albo przerwa w oddechu → delikatna zachęta do obrotu na bok.
+  void _positionNudge(DateTime now) {
+    if (!_s.positionNudge || Strap.instance.currentPos != BodyPos.back) return;
+    if (_lastNudge != null && now.difference(_lastNudge!).inMinutes < 5) return;
+    _lastNudge = now;
+    _muteUntil = now.add(const Duration(seconds: 4));
+    journal('zachęta do obrotu (na plecach)');
+    BakometrNative.vibrate(300);
+    Future.delayed(const Duration(milliseconds: 700), () => BakometrNative.vibrate(300));
+  }
+
   void _maybeNudge(DateTime now) {
+    final recentSnore = _snoreHits.where((d) => now.difference(d).inSeconds <= 60).length;
+    if (recentSnore >= 3) _positionNudge(now);
     if (!_s.antiSnore) return;
     final recent = _snoreHits.where((d) => now.difference(d).inSeconds <= 60).length;
     if (recent < 4) return;

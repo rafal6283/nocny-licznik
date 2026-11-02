@@ -10,7 +10,8 @@ class StrapMinute {
   final double? breathRate; // oddechy/min z ruchu klatki
   final double? breathVar; // zmienność odstępów między oddechami (CV)
   final bool posChange; // zmiana pozycji ciała (obrót o ≥ 30°)
-  const StrapMinute({this.hr, this.rmssd, this.activeSec, this.breathRate, this.breathVar, this.posChange = false});
+  final List<double>? gravity; // średni kierunek grawitacji w minucie (pozycja ciała)
+  const StrapMinute({this.hr, this.rmssd, this.activeSec, this.breathRate, this.breathVar, this.posChange = false, this.gravity});
 }
 
 /// Zbiera dane opaski na bieżąco i co minutę oddaje [StrapMinute].
@@ -119,7 +120,11 @@ class StrapMinuteProcessor {
     }
     final br = (act != null && act <= 3) ? _breath() : null;
     var pos = false;
+    List<double>? grav;
     if (_g10.isNotEmpty) {
+      grav = [
+        for (var k = 0; k < 3; k++) _g10.map((v) => v[k]).reduce((a, b) => a + b) / _g10.length,
+      ];
       final first = _gravStart ?? _g10.first;
       pos = _angle(first, _g10.last) >= 30;
       _gravStart = _g10.last;
@@ -132,6 +137,7 @@ class StrapMinuteProcessor {
       breathRate: br?.$1,
       breathVar: br?.$2,
       posChange: pos,
+      gravity: grav,
     );
     _bpm.clear();
     _rr.clear();

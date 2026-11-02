@@ -8,6 +8,7 @@ import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../engine/night_engine.dart';
+import 'body_position.dart';
 import 'bus.dart';
 import 'db.dart';
 import 'models.dart';
@@ -42,10 +43,91 @@ class Strap {
   StrapMinute? takeMinute() {
     final m = _proc.take();
     _accActiveNow = 0;
+    final now = DateTime.now().millisecondsSinceEpoch;
     if (m != null && m.posChange) {
-      _sink?.writeln('P,${DateTime.now().millisecondsSinceEpoch}');
+      _sink?.writeln('P,$now');
+    }
+    final g = m?.gravity;
+    if (g != null) {
+      _sink?.writeln('G,$now,${g.map((v) => v.toStringAsFixed(3)).join(',')}');
+      currentPos = positionOf(g);
     }
     return m;
+  }
+
+  /// Pozycja w ostatniej minucie (gdy opaska skalibrowana).
+  BodyPos? currentPos;
+
+  static BodyPos? positionOf(List<double> g) {
+    final b = parseVec(Settings.instance.strapBack), r = parseVec(Settings.instance.strapRight);
+    if (b == null || r == null) return null;
+    return classifyPosition(g, b, r);
+  }
+
+  bool get calibrated => parseVec(Settings.instance.strapBack) != null && parseVec(Settings.instance.strapRight) != null;
+
+  /// Kierunek grawitacji z kilku sekund (kalibracja pozycji w Ustawieniach). Nie w trakcie nocy.
+  Future<List<double>?> sampleGravity({Duration span = const Duration(seconds: 6)}) async {
+    if (_nightId != null) return null;
+    final id = Settings.instance.strapId;
+    if (id.isEmpty) return null;
+    final dev = BluetoothDevice.fromId(id);
+    final sum = [0.0, 0.0, 0.0];
+    var n = 0;
+    StreamSubscription<List<int>>? sub;
+    BluetoothCharacteristic? ctl;
+    var started = false;
+    try {
+      if (Platform.isAndroid && FlutterBluePlus.adapterStateNow != BluetoothAdapterState.on) await FlutterBluePlus.turnOn();
+      try {
+        await FlutterBluePlus.startScan(withRemoteIds: [id], timeout: const Duration(seconds: 5));
+        await FlutterBluePlus.isScanning.where((x) => !x).first.timeout(const Duration(seconds: 8));
+      } catch (_) {}
+      await dev.connect(license: License.nonprofit, timeout: const Duration(seconds: 20), mtu: null);
+      if (Platform.isAndroid) {
+        try {
+          await dev.requestMtu(232);
+        } catch (_) {}
+      }
+      final pmd = (await dev.discoverServices()).where((s) => s.uuid == _pmdService).firstOrNull;
+      if (pmd == null) return null;
+      ctl = pmd.characteristics.firstWhere((c) => c.uuid == _pmdControl);
+      final data = pmd.characteristics.firstWhere((c) => c.uuid == _pmdData);
+      sub = data.onValueReceived.listen((v) {
+        final xyz = parseAccFrame(v);
+        if (xyz == null) return;
+        for (var i = 0; i + 2 < xyz.length; i += 3) {
+          sum[0] += xyz[i];
+          sum[1] += xyz[i + 1];
+          sum[2] += xyz[i + 2];
+          n++;
+        }
+      });
+      await ctl.setNotifyValue(true);
+      await data.setNotifyValue(true);
+      final resp = Completer<List<int>>();
+      final rs = ctl.onValueReceived.listen((v) {
+        if (v.length > 3 && v[0] == 0xF0 && !resp.isCompleted) resp.complete(v);
+      });
+      await ctl.write(pmdStartAcc);
+      final r = await resp.future.timeout(const Duration(seconds: 5), onTimeout: () => const [0xF0, 0, 0, 0]);
+      await rs.cancel();
+      started = r[3] == 0;
+      await Future<void>.delayed(span);
+      return n < 25 ? null : [sum[0] / n, sum[1] / n, sum[2] / n];
+    } catch (_) {
+      return null;
+    } finally {
+      await sub?.cancel();
+      if (started) {
+        try {
+          await ctl?.write(pmdStopAcc);
+        } catch (_) {}
+      }
+      try {
+        await dev.disconnect();
+      } catch (_) {}
+    }
   }
 
   /// Czy tułów poruszał się w bieżącej minucie (inteligentny budzik).
@@ -285,7 +367,7 @@ class Strap {
     final out = <(DateTime, double)>[];
     for (final line in const LineSplitter().convert(await f.readAsString())) {
       final p = line.split(',');
-      if (p.length < 3 || p[2].isEmpty || p[0] == 'P') continue;
+      if (p.length < 3 || p[2].isEmpty || p[0] == 'P' || p[0] == 'G') continue;
       final t = int.tryParse(p[0]);
       if (t == null) continue;
       final rr = p[2].split(';').map(double.tryParse).whereType<double>().toList();
@@ -298,6 +380,22 @@ class Strap {
       out.addAll(beats.reversed);
     }
     out.sort((a, b) => a.$1.compareTo(b.$1));
+    return out;
+  }
+
+  /// Kierunek grawitacji co minutę (akcelerometr H10): (czas, wektor).
+  static Future<List<(DateTime, List<double>)>> loadGravity(int nightId) async {
+    final f = await fileFor(nightId);
+    if (!await f.exists()) return const [];
+    final out = <(DateTime, List<double>)>[];
+    for (final line in const LineSplitter().convert(await f.readAsString())) {
+      if (!line.startsWith('G,')) continue;
+      final p = line.split(',');
+      if (p.length != 5) continue;
+      final t = int.tryParse(p[1]);
+      final v = parseVec(p.sublist(2).join(','));
+      if (t != null && v != null) out.add((DateTime.fromMillisecondsSinceEpoch(t), v));
+    }
     return out;
   }
 
@@ -333,6 +431,8 @@ class Strap {
       for (final (t, s) in r.pauses) (t, 'h10pa', s, null),
       for (final t in r.ectopic) (t, 'h10pv', null, null),
       for (final t in pos) (t, 'h10po', null, null),
+      for (final (t, g) in await loadGravity(n.id!))
+        if (positionOf(g) case final bp?) (t, 'h10ps', bp.index.toDouble(), null),
     ]);
     if (r.hrAvg != null) {
       n.hrAvg = r.hrAvg;
