@@ -29,6 +29,7 @@ dependencies:
     path: packages/koofr_sync
 
 dev_dependencies:
+  sqflite_common_ffi: ^2.3.4
   flutter_lints: any
 
 flutter:

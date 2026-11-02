@@ -60,6 +60,16 @@ jobs:
         run: |
           set -o pipefail
           flutter analyze --no-fatal-infos --no-fatal-warnings 2>&1 | tee build.log
+      - name: Zrzuty ekranów
+        continue-on-error: true
+        run: SCREENSHOTS=build/zrzuty flutter test test/screenshots_test.dart
+      - name: Zrzuty ekranów (artefakt)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zrzuty-ekranow
+          path: build/zrzuty
+          if-no-files-found: ignore
       - name: APK
         run: |
           set -o pipefail
