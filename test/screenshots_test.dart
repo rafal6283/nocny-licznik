@@ -30,8 +30,9 @@ Future<void> _loadFonts() async {
 
 /// Czeka naprawdę (I/O, baza) i przesuwa zegar testu – bez pumpAndSettle, bo wskaźniki postępu kręcą się w kółko.
 Future<void> _wait(WidgetTester t, {int ms = 600}) async {
-  await t.runAsync(() => Future<void>.delayed(Duration(milliseconds: ms)));
-  for (var i = 0; i < 12; i++) {
+  // na przemian prawdziwe czekanie i klatka – łańcuchy await na bazie potrzebują obu
+  for (var i = 0; i < ms ~/ 50; i++) {
+    await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
     await t.pump(const Duration(milliseconds: 100));
   }
 }
