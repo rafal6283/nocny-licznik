@@ -47,6 +47,7 @@ class StrapCard extends StatelessWidget {
     final posList = [for (final p in BodyPos.values) if ((ps.minutes[p] ?? 0) > 0) p]
       ..sort((a, b) => (ps.minutes[b] ?? 0).compareTo(ps.minutes[a] ?? 0));
     final posTotal = ps.minutes.values.fold<int>(0, (a, b) => a + b);
+    final snoreTotal = ps.snore.values.fold<int>(0, (a, b) => a + b);
     final af = [
       for (final (a, b) in polarAf)
         if (a.isBefore(end) && b.isAfter(night.start)) (a.isBefore(night.start) ? night.start : a, b.isAfter(end) ? end : b)
@@ -130,6 +131,42 @@ class StrapCard extends StatelessWidget {
                 ),
               ]),
             ),
+          if (snoreTotal > 0) ...[
+            const SizedBox(height: 12),
+            Text('Chrapanie a pozycja · razem ${durHM(snoreTotal)}', style: const TextStyle(fontWeight: FontWeight.w600)),
+            const SizedBox(height: 6),
+            for (final p in [...posList]..sort((a, b) => (ps.snore[b] ?? 0).compareTo(ps.snore[a] ?? 0)))
+              if ((ps.snore[p] ?? 0) > 0)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 3),
+                  child: Row(children: [
+                    SizedBox(width: 110, child: Text(p.label, style: const TextStyle(fontSize: 13))),
+                    Expanded(
+                      child: TweenAnimationBuilder<double>(
+                        tween: Tween(begin: 0, end: (ps.snore[p] ?? 0) / snoreTotal),
+                        duration: const Duration(milliseconds: 800),
+                        curve: Curves.easeOutCubic,
+                        builder: (_, v, __) => ClipRRect(
+                          borderRadius: BorderRadius.circular(4),
+                          child: LinearProgressIndicator(value: v, minHeight: 8, color: C.rem, backgroundColor: C.surface2),
+                        ),
+                      ),
+                    ),
+                    SizedBox(
+                      width: 120,
+                      child: Text(
+                        '${durHM(ps.snore[p] ?? 0)} · ${(100 * (ps.snore[p] ?? 0) / snoreTotal).round()}%'
+                        '${(ps.minutes[p] ?? 0) > 0 ? ' · ${(100 * (ps.snore[p] ?? 0) / ps.minutes[p]!).round()}% czasu' : ''}',
+                        textAlign: TextAlign.right,
+                        style: const TextStyle(fontSize: 11, color: C.muted),
+                      ),
+                    ),
+                  ]),
+                ),
+            const SizedBox(height: 4),
+            const Text('Czas chrapania w każdej pozycji · udział w całym chrapaniu · jaką część czasu w tej pozycji chrapałeś.',
+                style: TextStyle(fontSize: 11, color: C.muted)),
+          ],
           const SizedBox(height: 4),
           const Text('Czas w pozycji · przerwy w oddechu na godzinę · udział chrapania. Jeśli na plecach jest ich wyraźnie więcej, '
               'pomaga spanie na boku (w Ustawieniach: zachęta wibracją).', style: TextStyle(fontSize: 11, color: C.muted)),
