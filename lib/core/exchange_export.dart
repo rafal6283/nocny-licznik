@@ -12,7 +12,8 @@ import 'models.dart';
 ///   "format": "wymiana-zdarzen", "version": 1, "source": "rytm-snu", "exported_at": ms,
 ///   (do wersji 2.8 źródło nazywało się "nocny-licznik" — aplikacje odbierające akceptują oba)
 ///   "windows": [{"start": ms, "end": ms}],     // noce, w których aplikacja nasłuchiwała
-///   "events":  [{"id": "...", "type": "fart", "start": ms, "confidence": 0.8, "verified": true|false|null}]
+///   "events":  [{"id": "...", "type": "fart", "start": ms, "confidence": 0.8, "verified": true|false|null},
+///               {"id": "...", "type": "af", "start": ms, "end": ms}]   // nieregularny rytm z opaski (odstępy RR)
 /// }
 /// Czasy w milisekundach od epoki (UTC). Plik zawiera całą historię – import w Kresce
 /// zastępuje poprzednie dane z tego źródła, więc można eksportować wielokrotnie.
@@ -32,6 +33,9 @@ Future<(List<int>, int, int)> buildFartExchange() async {
   final farts = (await db.allEvents(SoundType.fart)).where((e) => finished.contains(e.nightId)).toList()
     ..sort((a, b) => a.ts.compareTo(b.ts));
 
+  // nieregularny rytm (podejrzenie AF) z odstępów RR własnej opaski – noce z Polar EKG go nie mają
+  final af = (await db.extOfKind('h10af')).where((e) => finished.contains(e.$1) && (e.$4 ?? 0) > 0).toList();
+
   final now = DateTime.now();
   final bytes = utf8.encode(jsonEncode({
     'format': 'wymiana-zdarzen',
@@ -50,6 +54,13 @@ Future<(List<int>, int, int)> buildFartExchange() async {
           'start': e.ts.millisecondsSinceEpoch,
           'confidence': double.parse(e.confidence.toStringAsFixed(3)),
           'verified': e.verified,
+        },
+      for (final (i, (night, t, _, dur)) in af.indexed)
+        {
+          'id': 'n$night-af$i',
+          'type': 'af',
+          'start': t.millisecondsSinceEpoch,
+          'end': t.millisecondsSinceEpoch + (dur! * 60000).round(),
         },
     ],
   }));

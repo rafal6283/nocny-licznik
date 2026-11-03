@@ -5,13 +5,14 @@ import 'package:flutter/material.dart';
 import '../core/fmt.dart';
 import '../core/body_position.dart';
 import '../core/models.dart';
+import 'hr_explorer_screen.dart';
 import 'theme.dart';
 
-const _hrColor = Color(0xFFFF6B8A);
-const _irrColor = Color(0xFFFFB74D);
-const _afColor = Color(0xFFFF4D6D);
-const _pauseColor = Color(0xFFB59BFF);
-const _ectColor = Color(0xFF7BE3B0);
+const hrColor = Color(0xFFFF6B8A);
+const irrColor = Color(0xFFFFB74D);
+const afColor = Color(0xFFFF4D6D);
+const pauseColor = Color(0xFFB59BFF);
+const ectColor = Color(0xFF7BE3B0);
 
 /// Tętno i rytm z opaski na tle faz snu: nieregularny rytm (z odstępów RR), napady AF z Polar EKG,
 /// pauzy i pobudzenia dodatkowe – w tej samej skali czasu co wykres snu.
@@ -58,26 +59,37 @@ class StrapCard extends StatelessWidget {
     return Section(
       title: 'Tętno i rytm',
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        SizedBox(
-          height: 150,
-          child: CustomPaint(painter: _StrapPainter(night.start, end, minutes, irr, af, pauses, ect)),
+        GestureDetector(
+          onTap: () => _open(context, irr, af, pauses, ect),
+          child: SizedBox(
+            height: 150,
+            child: CustomPaint(painter: _StrapPainter(night.start, end, minutes, irr, af, pauses, ect)),
+          ),
+        ),
+        Align(
+          alignment: Alignment.centerRight,
+          child: TextButton.icon(
+            onPressed: () => _open(context, irr, af, pauses, ect),
+            icon: const Icon(Icons.zoom_in, size: 18),
+            label: const Text('Przeglądaj dokładnie'),
+          ),
         ),
         const SizedBox(height: 8),
         Wrap(spacing: 12, runSpacing: 4, children: [
-          _legend(_hrColor, 'tętno'),
-          if (irr.isNotEmpty) _legend(_irrColor, 'nieregularny rytm'),
-          if (af.isNotEmpty) _legend(_afColor, 'AF w EKG'),
-          if (pauses.isNotEmpty) _legend(_pauseColor, 'pauza ≥ 2 s'),
-          if (ect.isNotEmpty) _legend(_ectColor, 'pobudzenie dodatkowe'),
+          _legend(hrColor, 'tętno'),
+          if (irr.isNotEmpty) _legend(irrColor, 'nieregularny rytm'),
+          if (af.isNotEmpty) _legend(afColor, 'AF w EKG'),
+          if (pauses.isNotEmpty) _legend(pauseColor, 'pauza ≥ 2 s'),
+          if (ect.isNotEmpty) _legend(ectColor, 'pobudzenie dodatkowe'),
         ]),
         const SizedBox(height: 10),
         TileGrid(columns: 3, children: [
-          StatTile(label: 'Tętno śr.', value: night.hrAvg == null ? '—' : '${night.hrAvg!.round()}', color: _hrColor),
-          StatTile(label: 'Tętno min.', value: night.hrMin == null ? '—' : '${night.hrMin!.round()}', color: _hrColor),
-          StatTile(label: 'Pauzy ≥ 2 s', value: '${pauses.length}', sub: longest == null ? null : 'maks. ${longest.toStringAsFixed(1)} s', color: _pauseColor),
-          StatTile(label: 'Pobudzenia dodatkowe', value: '$ectN', sub: fromPolar ? 'z EKG' : null, color: _ectColor),
-          StatTile(label: 'Nieregularny rytm', value: durHM(irrMin), color: _irrColor),
-          StatTile(label: 'AF (Polar EKG)', value: af.isEmpty ? '—' : durHM(afMin), color: _afColor),
+          StatTile(label: 'Tętno śr.', value: night.hrAvg == null ? '—' : '${night.hrAvg!.round()}', color: hrColor),
+          StatTile(label: 'Tętno min.', value: night.hrMin == null ? '—' : '${night.hrMin!.round()}', color: hrColor),
+          StatTile(label: 'Pauzy ≥ 2 s', value: '${pauses.length}', sub: longest == null ? null : 'maks. ${longest.toStringAsFixed(1)} s', color: pauseColor),
+          StatTile(label: 'Pobudzenia dodatkowe', value: '$ectN', sub: fromPolar ? 'z EKG' : null, color: ectColor),
+          StatTile(label: 'Nieregularny rytm', value: durHM(irrMin), color: irrColor),
+          StatTile(label: 'AF (Polar EKG)', value: af.isEmpty ? '—' : durHM(afMin), color: afColor),
           StatTile(label: 'HRV (RMSSD)', value: hrvMed == null ? '—' : '${hrvMed.round()} ms', sub: 'mediana nocy'),
           if (hasAcc) StatTile(label: 'Zmiany pozycji', value: '$posCh'),
           if (hasAcc)
@@ -102,7 +114,7 @@ class StrapCard extends StatelessWidget {
                     curve: Curves.easeOutCubic,
                     builder: (_, v, __) => ClipRRect(
                       borderRadius: BorderRadius.circular(4),
-                      child: LinearProgressIndicator(value: v, minHeight: 8, color: p == BodyPos.back ? _irrColor : C.light, backgroundColor: C.surface2),
+                      child: LinearProgressIndicator(value: v, minHeight: 8, color: p == BodyPos.back ? irrColor : C.light, backgroundColor: C.surface2),
                     ),
                   ),
                 ),
@@ -139,6 +151,13 @@ class StrapCard extends StatelessWidget {
     );
   }
 
+  void _open(BuildContext context, List<(DateTime, DateTime)> irr, List<(DateTime, DateTime)> af, List<(DateTime, double)> pauses,
+      List<DateTime> ect) {
+    Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => HrExplorerScreen(night: night, minutes: minutes, irr: irr, af: af, pauses: pauses, ect: ect),
+    ));
+  }
+
   Widget _legend(Color c, String t) => Row(mainAxisSize: MainAxisSize.min, children: [
         Container(width: 10, height: 10, decoration: BoxDecoration(color: c, borderRadius: BorderRadius.circular(2))),
         const SizedBox(width: 4),
@@ -169,10 +188,10 @@ class _StrapPainter extends CustomPainter {
     }
     // pasma: nieregularny rytm i AF z EKG
     for (final (a, b) in irr) {
-      canvas.drawRect(Rect.fromLTRB(x(a), top, max(x(a) + 1, x(b)), top + h), Paint()..color = _irrColor.withValues(alpha: 0.25));
+      canvas.drawRect(Rect.fromLTRB(x(a), top, max(x(a) + 1, x(b)), top + h), Paint()..color = irrColor.withValues(alpha: 0.25));
     }
     for (final (a, b) in af) {
-      canvas.drawRect(Rect.fromLTRB(x(a), top, max(x(a) + 1, x(b)), top + h), Paint()..color = _afColor.withValues(alpha: 0.35));
+      canvas.drawRect(Rect.fromLTRB(x(a), top, max(x(a) + 1, x(b)), top + h), Paint()..color = afColor.withValues(alpha: 0.35));
     }
     // tętno
     final pts = [for (final m in ms) if (m.hr != null) (m.ts, m.hr!)];
@@ -191,7 +210,7 @@ class _StrapPainter extends CustomPainter {
         prev = t;
       }
       canvas.drawPath(path, Paint()
-        ..color = _hrColor
+        ..color = hrColor
         ..style = PaintingStyle.stroke
         ..strokeWidth = 1.6);
       _text(canvas, '${hi.round()}', Offset(2, top));
@@ -200,11 +219,11 @@ class _StrapPainter extends CustomPainter {
     // pauzy i pobudzenia dodatkowe
     for (final (t, _) in pauses) {
       canvas.drawLine(Offset(x(t), top + h * 0.55), Offset(x(t), top + h), Paint()
-        ..color = _pauseColor
+        ..color = pauseColor
         ..strokeWidth = 1.5);
     }
     for (final t in ect) {
-      canvas.drawCircle(Offset(x(t), top + h - 3), 1.6, Paint()..color = _ectColor);
+      canvas.drawCircle(Offset(x(t), top + h - 3), 1.6, Paint()..color = ectColor);
     }
     // oś czasu
     var t = DateTime(start.year, start.month, start.day, start.hour + 1);

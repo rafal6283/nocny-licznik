@@ -221,6 +221,15 @@ class Db {
     });
   }
 
+  /// Wszystkie wpisy danego rodzaju ze wszystkich nocy: (noc, czas, wartość, czas trwania w min).
+  Future<List<(int, DateTime, double?, double?)>> extOfKind(String kind) async {
+    final r = await (await db).query('ext', where: 'kind = ?', whereArgs: [kind], orderBy: 'ts ASC');
+    return [
+      for (final m in r)
+        (m['night_id'] as int, DateTime.fromMillisecondsSinceEpoch(m['ts'] as int), (m['value'] as num?)?.toDouble(), (m['dur'] as num?)?.toDouble())
+    ];
+  }
+
   Future<List<(DateTime, String, double?, double?)>> ext(int nightId) async {
     final r = await (await db).query('ext', where: 'night_id = ?', whereArgs: [nightId], orderBy: 'ts ASC');
     return [
