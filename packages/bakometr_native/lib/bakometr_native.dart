@@ -150,6 +150,33 @@ class BakometrNative {
     }
   }
 
+  /// Zgoda na zapis tętna, HRV, oddechu i tętna spoczynkowego. true = jest.
+  static Future<bool> healthConnectHasVitalsPermission() async {
+    try {
+      return await _ch.invokeMethod<bool>('hcHasVitalsPermission') ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  static Future<bool> healthConnectRequestVitalsPermission() async {
+    try {
+      return await _ch.invokeMethod<bool>('hcRequestVitalsPermission') ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Zapisuje tętno/HRV/oddech nocy. Każda: id, hr: [[ms, bpm]], hrv: [[ms, ms]], resp: [[ms, /min]], resting: [ms, bpm].
+  /// Zwraca liczbę zapisanych rekordów lub -1.
+  static Future<int> healthConnectWriteVitals(List<Map<String, Object?>> nights) async {
+    try {
+      return await _ch.invokeMethod<int>('hcWriteVitals', {'nights': nights}) ?? -1;
+    } catch (_) {
+      return -1;
+    }
+  }
+
   /// Zgoda na odczyt danych z zegarka (tętno, SpO₂, sen). true = jest.
   static Future<bool> healthConnectHasReadPermission() async {
     try {

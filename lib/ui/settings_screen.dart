@@ -281,6 +281,32 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await _pushAll();
   }
 
+  Future<void> _setHealthVitals(bool on) async {
+    if (!on) {
+      setState(() => s.healthVitals = false);
+      return;
+    }
+    final status = await BakometrNative.healthConnectStatus();
+    if (status == 'unavailable') {
+      _snack('Health Connect nie jest dostępne na tym telefonie');
+      return;
+    }
+    final ok = await BakometrNative.healthConnectRequestVitalsPermission();
+    if (!ok) {
+      _snack(status == 'update'
+          ? 'Zainstaluj lub zaktualizuj Health Connect ze Sklepu Play i włącz ponownie'
+          : 'Bez zgody na zapis tętna, HRV i oddechu w Health Connect nie da się tego włączyć');
+      return;
+    }
+    setState(() => s.healthVitals = true);
+    await _pushAllVitals();
+  }
+
+  Future<void> _pushAllVitals() async {
+    final n = await HealthSync.pushAllVitals();
+    _snack(n < 0 ? 'Nie udało się zapisać tętna i HRV w Health Connect' : 'Zapisano w Health Connect pomiarów: $n');
+  }
+
   Future<void> _setWatchData(bool on) async {
     if (!on) {
       setState(() => s.watchData = false);
@@ -608,6 +634,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   title: const Text('Wyślij wszystkie noce teraz'),
                   subtitle: const Text('Ponowny zapis aktualizuje noce, nie tworzy duplikatów'),
                   onTap: _pushAll,
+                ),
+              SwitchListTile(
+                secondary: const Icon(Icons.monitor_heart_outlined),
+                title: const Text('Tętno, HRV i oddech do Health Connect'),
+                subtitle: const Text('Z opaski: tętno co minutę, HRV (RMSSD) co 5 min i tętno spoczynkowe nocy; '
+                    'oddech z opaski lub mikrofonu. Bez danych z zegarka i nocy przejętych z Polar EKG – te są tam już zapisane'),
+                value: s.healthVitals,
+                onChanged: _setHealthVitals,
+              ),
+              if (s.healthVitals)
+                ListTile(
+                  leading: const Icon(Icons.sync),
+                  title: const Text('Wyślij tętno, HRV i oddech ze wszystkich nocy'),
+                  subtitle: const Text('Ponowny zapis aktualizuje pomiary, nie tworzy duplikatów'),
+                  onTap: _pushAllVitals,
                 ),
               SwitchListTile(
                 secondary: const Icon(Icons.watch_outlined),

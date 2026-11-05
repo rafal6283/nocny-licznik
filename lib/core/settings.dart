@@ -146,6 +146,9 @@ class Settings extends ChangeNotifier {
   /// Zapis każdej nocy do Health Connect (Android).
   bool get healthConnect => _b('healthConnect', false);
   set healthConnect(bool v) => _set('healthConnect', v);
+  /// Tętno, HRV, oddech i tętno spoczynkowe nocy do Health Connect.
+  bool get healthVitals => _b('healthVitals', false);
+  set healthVitals(bool v) => _set('healthVitals', v);
 
   /// Odczyt tętna, SpO₂ i faz snu z zegarka przez Health Connect (np. Huawei przez Health Sync).
   // --- Opaska na klatkę piersiową (BLE, np. Polar H10) ---

@@ -965,7 +965,8 @@ class NightEngine extends ChangeNotifier {
     n.end = DateTime.now();
     n.micBlockedMin = _blockedHops ~/ 120;
     await summarize(n, minutes, liveEvents);
-    unawaited(Strap.applyToNight(n).catchError((_) => null));
+    // po przeliczeniu danych z opaski – tętno, HRV i oddech do Health Connect
+    unawaited(Strap.applyToNight(n).catchError((_) => null).then((_) => HealthSync.pushVitals(n)).catchError((_) {}));
     unawaited(WeatherService.fetchFor(n).then((ok) {
       if (ok) dataChanged();
     }));
@@ -1018,7 +1019,7 @@ class NightEngine extends ChangeNotifier {
     await Db.instance.updateNight(n);
     if (n.id != null && ms.isNotEmpty) await Db.instance.saveStages(n.id!, ms);
     dataChanged();
-    if (push) unawaited(HealthSync.pushNight(n, ms));
+    if (push) unawaited(HealthSync.pushNightAll(n, ms));
   }
 
   /// Przy starcie aplikacji: domyka noce przerwane przez system (np. ubicie procesu).
@@ -1057,6 +1058,7 @@ class NightEngine extends ChangeNotifier {
       await summarize(n, ms, evs);
       try {
         await Strap.applyToNight(n);
+        await HealthSync.pushVitals(n);
       } catch (_) {}
     }
   }

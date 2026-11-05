@@ -9,6 +9,9 @@ import androidx.health.connect.client.HealthConnectClient
 import androidx.health.connect.client.PermissionController
 import androidx.health.connect.client.permission.HealthPermission
 import androidx.health.connect.client.records.HeartRateRecord
+import androidx.health.connect.client.records.HeartRateVariabilityRmssdRecord
+import androidx.health.connect.client.records.RespiratoryRateRecord
+import androidx.health.connect.client.records.RestingHeartRateRecord
 import androidx.health.connect.client.records.OxygenSaturationRecord
 import androidx.health.connect.client.records.Record
 import androidx.health.connect.client.records.SleepSessionRecord
@@ -39,6 +42,14 @@ class HealthSync(private val ctx: Context) : PluginRegistry.ActivityResultListen
         private const val PROVIDER = "com.google.android.apps.healthdata"
         val PERMS = setOf(HealthPermission.getWritePermission(SleepSessionRecord::class))
 
+        /** Zapis danych z opaski i mikrofonu: tętno, HRV (RMSSD), oddech, tętno spoczynkowe nocy. */
+        val VITAL_PERMS = setOf(
+            HealthPermission.getWritePermission(HeartRateRecord::class),
+            HealthPermission.getWritePermission(HeartRateVariabilityRmssdRecord::class),
+            HealthPermission.getWritePermission(RespiratoryRateRecord::class),
+            HealthPermission.getWritePermission(RestingHeartRateRecord::class),
+        )
+
         /** Odczyt danych z zegarka (np. Huawei przez Health Sync): tętno, SpO₂, sen z fazami. */
         val READ_PERMS = setOf(
             HealthPermission.getReadPermission(HeartRateRecord::class),
@@ -57,6 +68,12 @@ class HealthSync(private val ctx: Context) : PluginRegistry.ActivityResultListen
             "hcHasPermission" -> scope.launch { result.success(granted()) }
             "hcRequestPermission" -> request(activity, result, PERMS)
             "hcHasReadPermission" -> scope.launch { result.success(granted(READ_PERMS)) }
+            "hcHasVitalsPermission" -> scope.launch { result.success(granted(VITAL_PERMS)) }
+            "hcRequestVitalsPermission" -> request(activity, result, VITAL_PERMS)
+            "hcWriteVitals" -> {
+                val nights = call.argument<List<Map<String, Any?>>>("nights") ?: emptyList()
+                scope.launch { result.success(writeVitals(nights)) }
+            }
             "hcRequestReadPermission" -> request(activity, result, READ_PERMS)
             "hcReadNight" -> {
                 val from = (call.argument<Number>("start"))?.toLong() ?: 0L
@@ -181,6 +198,73 @@ class HealthSync(private val ctx: Context) : PluginRegistry.ActivityResultListen
             records.size
         } catch (e: Exception) {
             Log.w(TAG, "Zapis snu do Health Connect", e)
+            -1
+        }
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    private fun pairs(v: Any?): List<Pair<Long, Double>> = (v as? List<*>).orEmpty().mapNotNull { p ->
+        val l = p as? List<*> ?: return@mapNotNull null
+        val t = ms(l.getOrNull(0)) ?: return@mapNotNull null
+        val x = (l.getOrNull(1) as? Number)?.toDouble() ?: return@mapNotNull null
+        t to x
+    }
+
+    /**
+     * Dane z nocy: {id, hr: [[ms, bpm]], hrv: [[ms, rmssd]], resp: [[ms, oddechy/min]], resting: [ms, bpm]?}.
+     * Tętno w rekordach co godzinę, HRV i oddech jako pomiary punktowe. Stałe clientRecordId – ponowny zapis aktualizuje.
+     * Zwraca liczbę zapisanych rekordów albo -1.
+     */
+    private suspend fun writeVitals(nights: List<Map<String, Any?>>): Int {
+        if (!granted(VITAL_PERMS)) return -1
+        val version = System.currentTimeMillis()
+        val records = ArrayList<Record>()
+        for (n in nights) {
+            val id = n["id"] as? String ?: continue
+            pairs(n["hr"]).filter { it.second in 25.0..240.0 }.sortedBy { it.first }
+                .groupBy { it.first / 3_600_000L }.forEach { (hour, smp) ->
+                    val start = Instant.ofEpochMilli(smp.first().first)
+                    val end = Instant.ofEpochMilli(smp.last().first + 1000)
+                    records += HeartRateRecord(
+                        startTime = start, startZoneOffset = offset(start),
+                        endTime = end, endZoneOffset = offset(end),
+                        samples = smp.map { HeartRateRecord.Sample(Instant.ofEpochMilli(it.first), Math.round(it.second)) },
+                        metadata = Metadata(clientRecordId = "$id-hr-$hour", clientRecordVersion = version),
+                    )
+                }
+            for ((t, v) in pairs(n["hrv"])) {
+                if (v !in 1.0..200.0) continue
+                val at = Instant.ofEpochMilli(t)
+                records += HeartRateVariabilityRmssdRecord(
+                    time = at, zoneOffset = offset(at), heartRateVariabilityMillis = v,
+                    metadata = Metadata(clientRecordId = "$id-hrv-$t", clientRecordVersion = version),
+                )
+            }
+            for ((t, v) in pairs(n["resp"])) {
+                if (v !in 4.0..40.0) continue
+                val at = Instant.ofEpochMilli(t)
+                records += RespiratoryRateRecord(
+                    time = at, zoneOffset = offset(at), rate = v,
+                    metadata = Metadata(clientRecordId = "$id-resp-$t", clientRecordVersion = version),
+                )
+            }
+            pairs(listOf(n["resting"])).firstOrNull()?.let { (t, v) ->
+                if (v in 25.0..150.0) {
+                    val at = Instant.ofEpochMilli(t)
+                    records += RestingHeartRateRecord(
+                        time = at, zoneOffset = offset(at), beatsPerMinute = Math.round(v),
+                        metadata = Metadata(clientRecordId = "$id-rhr", clientRecordVersion = version),
+                    )
+                }
+            }
+        }
+        if (records.isEmpty()) return 0
+        return try {
+            val client = HealthConnectClient.getOrCreate(ctx)
+            records.chunked(100).forEach { client.insertRecords(it) }
+            records.size
+        } catch (e: Exception) {
+            Log.w(TAG, "Zapis tętna/HRV/oddechu do Health Connect", e)
             -1
         }
     }
