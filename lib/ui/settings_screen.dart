@@ -20,7 +20,10 @@ import '../core/settings.dart';
 import '../core/strap.dart';
 import '../core/weather.dart';
 import 'cloud_screen.dart';
+import '../cpap/cpap_data.dart';
+import '../cpap/cpap_import.dart';
 import 'accuracy_screen.dart';
+import 'cpap/cpap_screen.dart';
 import 'diagnostics_screen.dart';
 import 'placement_check_screen.dart';
 import 'sonar_test_screen.dart';
@@ -160,48 +163,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _sdBusy = false;
 
   /// Karta SD z ResMed AirSense 10/11: STR.edf + DATALOG (zdarzenia i przebiegi).
+  /// Karta SD z ResMed AirSense 10/11: kopia całej karty (analiza jak OSCAR) + dopisanie do nagranych nocy.
   Future<void> _importResmedSd() async {
     if (_sdBusy) return;
-    final nights = await Db.instance.nights();
-    if (nights.isEmpty) {
-      _snack('Najpierw nagraj choć jedną noc — dane z aparatu są dopisywane do nagranych nocy.');
-      return;
-    }
-    String ymd(DateTime d) =>
-        '${d.year.toString().padLeft(4, '0')}${d.month.toString().padLeft(2, '0')}${d.day.toString().padLeft(2, '0')}';
-    final first = nights.map((n) => n.start).reduce((a, b) => a.isBefore(b) ? a : b);
-    final last = nights.map((n) => n.start).reduce((a, b) => a.isAfter(b) ? a : b);
     setState(() => _sdBusy = true);
     try {
-      ResmedResult res;
-      if (Platform.isAndroid) {
-        final paths = await BakometrNative.pickCpapCard(
-            from: ymd(first.subtract(const Duration(days: 1))), to: ymd(last.add(const Duration(days: 1))));
-        if (paths == null) return;
-        if (paths.isEmpty) {
-          _snack('Nie znalazłem STR.edf ani folderu DATALOG. Wskaż główny folder karty SD z aparatu.');
-          return;
-        }
-        res = await ResmedImport.importPaths(paths);
-      } else {
-        final picked = await FilePicker.pickFiles(type: FileType.custom, allowedExtensions: const ['edf']);
-        if (picked.isEmpty) return;
-        final files = <(String, Uint8List)>[];
-        for (final f in picked) {
-          files.add((f.name, await f.readAsBytes()));
-        }
-        res = await ResmedImport.importFiles(files);
-      }
-      if (res.nightsDetail > 0) unawaited(Calibration.run());
-      if (res.problems.isNotEmpty && res.nightsSummary == 0 && res.nightsDetail == 0) {
-        _snack(res.problems.first);
-      } else if (res.nightsSummary == 0 && res.nightsDetail == 0) {
-        _snack('Wczytano ${res.files} plików, ale żaden dzień z aparatu nie pasuje do nagranych nocy.');
-      } else {
-        _snack('Aparat: podsumowania dla ${res.nightsSummary} ${plural(res.nightsSummary, 'nocy', 'nocy', 'nocy')}, '
-            'szczegóły dla ${res.nightsDetail} · ${res.events} zdarzeń'
-            '${res.problems.isEmpty ? '' : ' · ${res.problems.length} plików pominięto'}.');
-      }
+      final msg = await CardImport.run();
+      if (msg != null) _snack(msg);
     } catch (e) {
       _snack('Import z karty nie powiódł się: $e');
     } finally {
@@ -545,8 +513,35 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   : const Icon(Icons.sd_card_outlined),
               title: const Text('Importuj z karty SD (ResMed AirSense 10/11)'),
               subtitle: const Text('Wyjmij kartę z aparatu, włóż do czytnika (USB-C/OTG) i wskaż jej główny folder. '
-                  'AHI z podziałem na rodzaje bezdechów, nieszczelność, ciśnienie, oddech i zdarzenia z godziną'),
+                  'Kopiowane są wszystkie dane: podsumowania, ustawienia, zdarzenia, przebiegi i pełny zapis oddechu'),
               onTap: _importResmedSd,
+            ),
+            ListTile(
+              leading: const Icon(Icons.monitor_heart_outlined),
+              title: const Text('Analiza CPAP (jak OSCAR)'),
+              subtitle: const Text('Każda noc z przepływem oddechu i zdarzeniami, przegląd trendów, statystyki'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CpapScreen())),
+            ),
+            ListTile(
+              leading: const Icon(Icons.storage_outlined),
+              title: const Text('Pełny zapis oddechu (25 Hz)'),
+              subtitle: const Text('Ok. 3 MB na noc. Podsumowania, zdarzenia i przebiegi co 2 s są trzymane zawsze'),
+              trailing: DropdownButton<int>(
+                value: const [30, 90, 180, 365, 0].contains(s.cpapWaveDays) ? s.cpapWaveDays : 90,
+                underline: const SizedBox(),
+                items: const [
+                  DropdownMenuItem(value: 30, child: Text('30 dni')),
+                  DropdownMenuItem(value: 90, child: Text('90 dni')),
+                  DropdownMenuItem(value: 180, child: Text('180 dni')),
+                  DropdownMenuItem(value: 365, child: Text('rok')),
+                  DropdownMenuItem(value: 0, child: Text('wszystko')),
+                ],
+                onChanged: (v) {
+                  setState(() => s.cpapWaveDays = v ?? 90);
+                  unawaited(CpapStore.pruneWaveforms(s.cpapWaveDays));
+                },
+              ),
             ),
             ListTile(
               leading: const Icon(Icons.upload_file),
@@ -780,7 +775,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
         ),
         const SizedBox(height: 16),
-        const Center(child: Text('Rytm Snu 2.20', style: TextStyle(color: C.muted, fontSize: 12))),
+        const Center(child: Text('Rytm Snu 2.24', style: TextStyle(color: C.muted, fontSize: 12))),
       ],
     );
   }

@@ -17,6 +17,7 @@ import '../core/weather.dart';
 import '../engine/night_engine.dart';
 import 'charts.dart';
 import 'clip_player.dart';
+import 'cpap/cpap_screen.dart';
 import 'strap_card.dart';
 import 'theme.dart';
 
@@ -518,7 +519,14 @@ class _NightDetailScreenState extends State<NightDetailScreen> {
         );
     return Section(
       title: 'Aparat CPAP 😷',
-      trailing: TextButton(onPressed: () => _editCpap(night), child: Text(ahi == null ? 'Dodaj dane' : 'Edytuj')),
+      trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+        TextButton(
+          onPressed: () => Navigator.push(
+              context, MaterialPageRoute(builder: (_) => CpapScreen(initialDay: nightOf(night.start)))),
+          child: const Text('Analiza'),
+        ),
+        TextButton(onPressed: () => _editCpap(night), child: Text(ahi == null ? 'Dodaj' : 'Edytuj')),
+      ]),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         TileGrid(columns: 3, children: [
           StatTile(

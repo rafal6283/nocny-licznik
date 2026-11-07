@@ -22,29 +22,30 @@ import io.flutter.plugin.common.MethodChannel;
 import io.flutter.plugin.common.PluginRegistry;
 
 /**
- * Wybór karty SD aparatu ResMed (Storage Access Framework) i skopiowanie potrzebnych plików:
- * STR.edf oraz DATALOG/RRRRMMDD/*_EVE.edf i *_PLD.edf z zakresu dat. Duże *_BRP.edf są pomijane.
+ * Wybór karty SD aparatu ResMed (Storage Access Framework) i skopiowanie jej danych do pamięci aplikacji
+ * (files/cpap, ta sama struktura co na karcie): STR.edf, Identification.*, DATALOG/RRRRMMDD/*.edf
+ * (BRP — pełny przepływ i ciśnienie 25 Hz, PLD — przebiegi co 2 s, EVE/CSL — zdarzenia, SAD/SA2 — oksymetria).
+ * Kopiowanie przyrostowe: pliki o tej samej wielkości są pomijane. Pliki BRP tylko od dnia [waveFrom].
  */
 class CpapCardPicker implements PluginRegistry.ActivityResultListener {
     private static final int REQ = 4712;
     private final Context ctx;
     private MethodChannel.Result pending;
-    private String fromDay = "00000000", toDay = "99999999";
+    private String waveFrom = "00000000";
     private final Handler main = new Handler(Looper.getMainLooper());
 
     CpapCardPicker(Context ctx) {
         this.ctx = ctx;
     }
 
-    void pick(Activity activity, String from, String to, MethodChannel.Result result) {
+    void pick(Activity activity, String waveFromDay, MethodChannel.Result result) {
         if (activity == null) {
             result.error("no_activity", "Brak aktywności", null);
             return;
         }
         if (pending != null) pending.success(null);
         pending = result;
-        fromDay = from != null ? from : "00000000";
-        toDay = to != null ? to : "99999999";
+        waveFrom = waveFromDay != null ? waveFromDay : "00000000";
         Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
         i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
         activity.startActivityForResult(i, REQ);
@@ -63,16 +64,28 @@ class CpapCardPicker implements PluginRegistry.ActivityResultListener {
         final Uri tree = data.getData();
         Executors.newSingleThreadExecutor().execute(() -> {
             List<String> out = new ArrayList<>();
+            int[] stats = new int[2]; // [znalezione, pominięte bez zmian]
             String error = null;
+            boolean found = false;
             try {
-                copyAll(tree, out);
+                found = copyAll(tree, out, stats);
             } catch (Exception e) {
                 error = e.toString();
             }
             final String err = error;
+            final boolean ok = found;
             main.post(() -> {
-                if (out.isEmpty() && err != null) r.error("copy", err, null);
-                else r.success(out);
+                if (out.isEmpty() && err != null) {
+                    r.error("copy", err, null);
+                    return;
+                }
+                java.util.HashMap<String, Object> m = new java.util.HashMap<>();
+                m.put("root", new File(ctx.getFilesDir(), "cpap").getAbsolutePath());
+                m.put("copied", out);
+                m.put("found", ok);
+                m.put("files", stats[0]);
+                m.put("unchanged", stats[1]);
+                r.success(m);
             });
         });
         return true;
@@ -80,10 +93,12 @@ class CpapCardPicker implements PluginRegistry.ActivityResultListener {
 
     private static class Doc {
         final String id, name, mime;
-        Doc(String id, String name, String mime) {
+        final long size;
+        Doc(String id, String name, String mime, long size) {
             this.id = id;
             this.name = name;
             this.mime = mime;
+            this.size = size;
         }
         boolean isDir() {
             return DocumentsContract.Document.MIME_TYPE_DIR.equals(mime);
@@ -97,53 +112,81 @@ class CpapCardPicker implements PluginRegistry.ActivityResultListener {
         try (Cursor c = cr.query(uri, new String[]{
                 DocumentsContract.Document.COLUMN_DOCUMENT_ID,
                 DocumentsContract.Document.COLUMN_DISPLAY_NAME,
-                DocumentsContract.Document.COLUMN_MIME_TYPE}, null, null, null)) {
+                DocumentsContract.Document.COLUMN_MIME_TYPE,
+                DocumentsContract.Document.COLUMN_SIZE}, null, null, null)) {
             if (c == null) return out;
-            while (c.moveToNext()) out.add(new Doc(c.getString(0), c.getString(1), c.getString(2)));
+            while (c.moveToNext()) {
+                long size = c.isNull(3) ? -1 : c.getLong(3);
+                out.add(new Doc(c.getString(0), c.getString(1), c.getString(2), size));
+            }
         }
         return out;
     }
 
-    private void copyAll(Uri tree, List<String> out) throws Exception {
-        File dir = new File(ctx.getCacheDir(), "cpap_sd");
-        deleteRec(dir);
+    /** Zwraca true, gdy wskazany folder wygląda na kartę ResMed (STR.edf lub DATALOG). */
+    private boolean copyAll(Uri tree, List<String> out, int[] stats) throws Exception {
+        // dawny katalog tymczasowy
+        deleteRec(new File(ctx.getCacheDir(), "cpap_sd"));
+        File root = new File(ctx.getFilesDir(), "cpap");
         //noinspection ResultOfMethodCallIgnored
-        dir.mkdirs();
+        root.mkdirs();
         String rootId = DocumentsContract.getTreeDocumentId(tree);
-        List<Doc> root = children(tree, rootId);
+        List<Doc> top = children(tree, rootId);
         Doc datalog = null;
-        for (Doc d : root) {
+        boolean found = false;
+        for (Doc d : top) {
             String n = d.name == null ? "" : d.name;
-            if (!d.isDir() && n.equalsIgnoreCase("STR.edf")) out.add(copy(tree, d, dir, n));
-            if (d.isDir() && n.equalsIgnoreCase("DATALOG")) datalog = d;
+            String u = n.toUpperCase();
+            if (!d.isDir() && (u.equals("STR.EDF") || u.startsWith("IDENTIFICATION."))) {
+                found |= u.equals("STR.EDF");
+                copyIfChanged(tree, d, root, n, out, stats);
+            }
+            if (d.isDir() && u.equals("DATALOG")) datalog = d;
         }
         // Użytkownik mógł wskazać sam folder DATALOG
-        if (datalog == null && root.stream().anyMatch(d -> d.isDir() && d.name != null && d.name.matches("\\d{8}"))) {
-            datalog = new Doc(rootId, "DATALOG", DocumentsContract.Document.MIME_TYPE_DIR);
+        if (datalog == null && top.stream().anyMatch(d -> d.isDir() && d.name != null && d.name.matches("\\d{8}"))) {
+            datalog = new Doc(rootId, "DATALOG", DocumentsContract.Document.MIME_TYPE_DIR, -1);
         }
-        if (datalog == null) return;
+        if (datalog == null) return found;
+        found = true;
+        File dl = new File(root, "DATALOG");
         for (Doc day : children(tree, datalog.id)) {
             if (!day.isDir() || day.name == null || !day.name.matches("\\d{8}")) continue;
-            if (day.name.compareTo(fromDay) < 0 || day.name.compareTo(toDay) > 0) continue;
+            boolean waves = day.name.compareTo(waveFrom) >= 0;
+            File dir = new File(dl, day.name);
             for (Doc f : children(tree, day.id)) {
                 String n = f.name == null ? "" : f.name;
                 String u = n.toUpperCase();
-                if (u.endsWith("_EVE.EDF") || u.endsWith("_PLD.EDF")) out.add(copy(tree, f, dir, n));
+                if (!u.endsWith(".EDF")) continue;
+                if (u.contains("_BRP") && !waves) continue;
+                //noinspection ResultOfMethodCallIgnored
+                dir.mkdirs();
+                copyIfChanged(tree, f, dir, n, out, stats);
             }
         }
+        return found;
     }
 
-    private String copy(Uri tree, Doc d, File dir, String name) throws Exception {
-        Uri uri = DocumentsContract.buildDocumentUriUsingTree(tree, d.id);
+    private void copyIfChanged(Uri tree, Doc d, File dir, String name, List<String> out, int[] stats) throws Exception {
+        stats[0]++;
         File f = new File(dir, name);
+        if (f.exists() && d.size >= 0 && f.length() == d.size) {
+            stats[1]++;
+            return;
+        }
+        Uri uri = DocumentsContract.buildDocumentUriUsingTree(tree, d.id);
+        File tmp = new File(dir, name + ".part");
         try (InputStream in = ctx.getContentResolver().openInputStream(uri);
-             OutputStream os = new FileOutputStream(f)) {
+             OutputStream os = new FileOutputStream(tmp)) {
             if (in == null) throw new Exception("Nie można otworzyć " + name);
             byte[] buf = new byte[65536];
             int r;
             while ((r = in.read(buf)) > 0) os.write(buf, 0, r);
         }
-        return f.getAbsolutePath();
+        //noinspection ResultOfMethodCallIgnored
+        f.delete();
+        if (!tmp.renameTo(f)) throw new Exception("Nie można zapisać " + name);
+        out.add(f.getAbsolutePath());
     }
 
     private static void deleteRec(File f) {

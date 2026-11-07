@@ -65,7 +65,7 @@ public class BakometrNativePlugin implements FlutterPlugin, MethodChannel.Method
     public void onMethodCall(@NonNull MethodCall call, @NonNull MethodChannel.Result result) {
         if (health != null && health.handle(call, result, activity)) return;
         if ("pickCpapCard".equals(call.method)) {
-            cpapPicker.pick(activity, call.argument("from"), call.argument("to"), result);
+            cpapPicker.pick(activity, call.argument("waveFrom"), result);
             return;
         }
         switch (call.method) {

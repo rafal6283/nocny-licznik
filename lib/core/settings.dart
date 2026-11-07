@@ -170,6 +170,10 @@ class Settings extends ChangeNotifier {
   bool get watchData => _b('watchData', false);
   set watchData(bool v) => _set('watchData', v);
 
+  /// Ile dni wstecz trzymać pełny zapis oddechu z aparatu CPAP (pliki BRP); 0 = wszystkie.
+  int get cpapWaveDays => _i('cpapWaveDays', 90);
+  set cpapWaveDays(int v) => _set('cpapWaveDays', v);
+
   bool get watchStagesBackfilled => _b('watchStagesBf', false);
   set watchStagesBackfilled(bool v) => _set('watchStagesBf', v);
 

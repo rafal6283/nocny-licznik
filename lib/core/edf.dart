@@ -123,6 +123,33 @@ class EdfFile {
     return out;
   }
 
+  /// Cały sygnał jako Float32List (szybko, bez list pośrednich). Wartości cyfrowe równe minimum
+  /// cyfrowemu (znacznik braku danych w plikach ResMed) dają NaN, jeśli [sentinelNaN].
+  Float32List signalF32(int sig, {bool sentinelNaN = false}) {
+    final s = signals[sig];
+    final bd = ByteData.sublistView(_bytes);
+    final spr = s.samplesPerRecord;
+    final out = Float32List(numRecords * spr);
+    final g = s.gain, dmin = s.digMin, pmin = s.physMin;
+    var k = 0;
+    for (var r = 0; r < numRecords; r++) {
+      final base = _headerBytes + r * _recordBytes + _offsets[sig];
+      for (var j = 0; j < spr; j++) {
+        final pos = base + j * 2;
+        if (pos + 2 > _bytes.length) {
+          out[k++] = double.nan;
+          continue;
+        }
+        final d = bd.getInt16(pos, Endian.little);
+        out[k++] = (sentinelNaN && d == dmin) ? double.nan : (d - dmin) * g + pmin;
+      }
+    }
+    return out;
+  }
+
+  /// Czas trwania nagrania w sekundach.
+  double get durationSec => numRecords * recordDuration;
+
   /// Cały sygnał (wszystkie rekordy po kolei).
   List<double> signal(int sig) => [for (var r = 0; r < numRecords; r++) ...record(sig, r)];
 
