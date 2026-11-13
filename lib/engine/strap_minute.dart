@@ -110,7 +110,18 @@ class StrapMinuteProcessor {
   /// Dane minuty (i zerowanie); null, gdy opaska nic nie przysłała.
   StrapMinute? take() {
     final hasHr = _bpm.isNotEmpty || _rr.length >= 10;
-    if (!hasHr && !_accThisMinute) return null;
+    // Bez tętna opaska nie jest na ciele (zdjęta, leży obok, sucha elektroda): ruch z jej
+    // akcelerometru oznaczałby „bezruch” i fałszywy sen głęboki, więc minutę pomijamy —
+    // fazy liczą się wtedy z telefonu/sonaru jak bez opaski.
+    if (!hasHr) {
+      if (_accThisMinute) _acc.takeActiveSeconds();
+      _g10.clear();
+      _gravStart = null;
+      _accThisMinute = false;
+      _bpm.clear();
+      _rr.clear();
+      return null;
+    }
     final act = _accThisMinute ? _acc.takeActiveSeconds() : null;
     double? hr;
     if (_rr.length >= 10) {

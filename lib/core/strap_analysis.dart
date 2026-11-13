@@ -86,6 +86,14 @@ StrapResult analyzeStrap(List<(DateTime, double)> rr) {
 }
 
 /// Parsowanie pomiaru tętna BLE (0x2A37): (tętno, odstępy RR w ms).
+/// Czy opaska ma kontakt ze skórą: false = zgłasza brak kontaktu, null = nie obsługuje tej informacji.
+bool? heartRateContact(List<int> d) {
+  if (d.isEmpty) return null;
+  final f = d[0];
+  if (f & 0x04 == 0) return null;
+  return f & 0x02 != 0;
+}
+
 (int, List<double>)? parseHeartRate(List<int> d) {
   if (d.length < 2) return null;
   final flags = d[0];

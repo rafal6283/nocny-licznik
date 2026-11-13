@@ -282,6 +282,12 @@ class Strap {
   void _onValue(List<int> v) {
     final m = parseHeartRate(v);
     if (m == null) return;
+    // Opaska zdjęta (brak kontaktu elektrod ze skórą): nie liczymy tętna — a bez tętna
+    // minuta nie jest traktowana jako „opaska na ciele” (patrz StrapMinuteProcessor.take).
+    if (heartRateContact(v) == false || m.$1 <= 0) {
+      lastHr.value = null;
+      return;
+    }
     lastHr.value = m.$1;
     _proc.addHr(m.$1, m.$2);
     final t = DateTime.now().millisecondsSinceEpoch;
