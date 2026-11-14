@@ -21,6 +21,8 @@ import '../core/models.dart';
 import '../core/night_log.dart';
 import '../core/settings.dart';
 import '../core/body_position.dart';
+import '../core/home_assistant.dart';
+import '../core/room_sensor.dart';
 import '../core/strap.dart';
 import 'classifier.dart';
 import 'accel_breath.dart';
@@ -41,6 +43,8 @@ class NightPlan {
   final int lullabyMin;
   final int delayMin;
   final bool cpap;
+  /// Drzemka: budzik po tylu minutach od zaśnięcia (0 = zwykła noc).
+  final int napMin;
   const NightPlan({
     this.alarmAt,
     this.smartWindowMin = 30,
@@ -50,6 +54,7 @@ class NightPlan {
     this.lullabyMin = 20,
     this.delayMin = 0,
     this.cpap = false,
+    this.napMin = 0,
   });
 }
 
@@ -223,10 +228,14 @@ class NightEngine extends ChangeNotifier {
     await BakometrNative.requestNotificationPermission();
 
     final now = DateTime.now();
+    final nap = plan.napMin > 0;
+    _napMin = plan.napMin;
     night = Night(
       start: now,
-      alarmAt: plan.alarmAt,
-      smartWindowMin: plan.smartWindowMin,
+      // drzemka: twardy limit = czas drzemki + 30 min na zaśnięcie
+      alarmAt: nap ? now.add(Duration(minutes: plan.napMin + 30)) : plan.alarmAt,
+      smartWindowMin: nap ? 0 : plan.smartWindowMin,
+      nap: nap,
       tags: plan.tags,
       lightManual: plan.lightManual,
       cpap: plan.cpap,
@@ -239,6 +248,9 @@ class NightEngine extends ChangeNotifier {
     state = NightState.tracking;
     notifyListeners();
     unawaited(Strap.instance.start(night!.id!));
+    unawaited(RoomSensor.instance.start());
+    HomeAssistant.resetNight();
+    if (!nap) unawaited(HomeAssistant.eveningDim());
 
     final fgsError = await BakometrNative.startTracking(title: 'Rytm Snu nasłuchuje', text: 'Dobranoc 🌙');
     final dev = await BakometrNative.deviceInfo();
@@ -333,10 +345,10 @@ class NightEngine extends ChangeNotifier {
     _alarmTimer = Timer.periodic(const Duration(seconds: 15), (_) => _checkAlarm());
 
     // Zapasowe powiadomienie (gdyby system zamknął aplikację w nocy)
-    if (plan.alarmAt != null) {
+    if (night!.alarmAt != null) {
       await BakometrNative.scheduleNotification(
         id: 900,
-        at: plan.alarmAt!.add(const Duration(minutes: 1)),
+        at: night!.alarmAt!.add(const Duration(minutes: 1)),
         title: 'Pobudka! ⏰',
         body: 'Budzik Rytmu Snu — aplikacja została zamknięta w nocy.',
       );
@@ -346,6 +358,10 @@ class NightEngine extends ChangeNotifier {
   }
 
   void _reset() {
+    _therapyLeq.clear();
+    _quietRun = _hissRun = _maskOffAlerts = _leakAlerts = 0;
+    _lastMaskAlert = null;
+    maskEvents.clear();
     _acc = AccelProcessor();
     _minRustle = 0;
     _lastFlush = DateTime.now();
@@ -797,6 +813,11 @@ class NightEngine extends ChangeNotifier {
     final activeSec = _acc.takeActiveSeconds();
     // Opaska na klatce (jeśli jest): tętno, HRV, ruch tułowia, oddech z ruchu klatki.
     final strap = Strap.instance.takeMinute();
+    final room = RoomSensor.instance.current();
+    final nn = n!;
+    if (!nn.nap && nn.alarmAt != null) {
+      unawaited(HomeAssistant.sunriseTick(nn.alarmAt!.subtract(Duration(minutes: nn.smartWindowMin))));
+    }
     // Oddech z akcelerometru, gdy nie ma sonaru i minuta była spokojna.
     final accBreath = (!sonarGood && activeSec <= 3) ? _acc.breath() : null;
     // Kolejność źródeł oddechu: opaska (ruch klatki) → sonar → telefon na materacu.
@@ -823,7 +844,10 @@ class NightEngine extends ChangeNotifier {
       activeSec: activeSec,
       screen: screen,
       rustle: _minRustle,
+      roomTemp: room?.$1,
+      roomHum: room?.$2,
     );
+    _maskCheck(m);
     sonar?.clearMinute();
     _minSonarMotion = 0;
     _luxFresh = false;
@@ -845,6 +869,77 @@ class NightEngine extends ChangeNotifier {
   // =====================================================================
   // BUDZIK
   // =====================================================================
+  int _napMin = 0;
+
+  // ---------------------------------------------------------------- maska CPAP na żywo
+  final List<double> _therapyLeq = [];
+  int _quietRun = 0, _hissRun = 0, _maskOffAlerts = 0, _leakAlerts = 0;
+  DateTime? _lastMaskAlert;
+  final List<(DateTime, String, double?, double?)> maskEvents = [];
+
+  /// Tryb CPAP: równy szum aparatu to „tło terapii”. Gdy minuta jest dużo cichsza (aparat stanął
+  /// — maska zdjęta), albo dużo głośniejsza równym sykiem (nieszczelność), delikatna wibracja.
+  void _maskCheck(MinuteSample m) {
+    final n = night;
+    if (n == null || !n.cpap || !_s.maskAlerts || state != NightState.tracking || lullabyPlaying) return;
+    final leq = m.noiseDb;
+    if (leq <= -120) return;
+    final since = DateTime.now().difference(n.start).inMinutes;
+    // tło terapii: mediana ostatnich 30 „zwykłych” minut
+    double? base;
+    if (_therapyLeq.length >= 15) {
+      final s2 = [..._therapyLeq]..sort();
+      base = s2[s2.length ~/ 2];
+    }
+    final quiet = base != null && leq < base - 8;
+    final hiss = base != null && leq > base + 7 && (m.noiseMax ?? leq) - leq < 6;
+    if (!quiet && !hiss) {
+      _therapyLeq.add(leq);
+      if (_therapyLeq.length > 30) _therapyLeq.removeAt(0);
+    }
+    _quietRun = quiet ? _quietRun + 1 : 0;
+    _hissRun = hiss ? _hissRun + 1 : 0;
+    if (since < 15 || base == null) return;
+    // nie w oknie budzika
+    if (n.alarmAt != null && DateTime.now().isAfter(n.alarmAt!.subtract(Duration(minutes: n.smartWindowMin + 5)))) return;
+    final now = DateTime.now();
+    final gapOk = _lastMaskAlert == null || now.difference(_lastMaskAlert!).inMinutes >= 10;
+    if (_quietRun >= 2 && gapOk && _maskOffAlerts < 3) {
+      _maskOffAlerts++;
+      _lastMaskAlert = now;
+      maskEvents.add((now, 'mic_off', base - leq, null));
+      journal('MASKA: aparat ucichł (${(base - leq).toStringAsFixed(0)} dB poniżej tła) — przypomnienie');
+      unawaited(_buzz(3));
+    } else if (_hissRun >= 2 && gapOk && _leakAlerts < 4) {
+      _leakAlerts++;
+      _lastMaskAlert = now;
+      maskEvents.add((now, 'mic_leak', leq - base, null));
+      journal('MASKA: syk ${(leq - base).toStringAsFixed(0)} dB ponad tło — przypomnienie o nieszczelności');
+      unawaited(_buzz(2));
+    }
+  }
+
+  Future<void> _buzz(int times) async {
+    for (var i = 0; i < times; i++) {
+      await BakometrNative.vibrate(350);
+      await Future<void>.delayed(const Duration(milliseconds: 700));
+    }
+  }
+
+  /// Drzemka: zaśnięcie = pierwsze 5 spokojnych minut z rzędu (bez ruchu i ekranu);
+  /// budzik [_napMin] minut później.
+  DateTime? get napAlarm {
+    final n = night;
+    if (n == null || !n.nap || _napMin <= 0) return null;
+    var run = 0;
+    for (final m in minutes) {
+      final still = (m.activeSec ?? (m.motion > 1.0 ? 9 : 0)) <= 2 && m.screen == 0 && (m.strapAct ?? 0) <= 2;
+      run = still ? run + 1 : 0;
+      if (run >= 5) return m.ts.subtract(const Duration(minutes: 5)).add(Duration(minutes: _napMin));
+    }
+    return null;
+  }
+
   void _checkAlarm() {
     final n = night;
     if (n == null) return;
@@ -854,6 +949,13 @@ class NightEngine extends ChangeNotifier {
       return;
     }
     if (state != NightState.tracking || n.alarmAt == null) return;
+    if (n.nap) {
+      final at = napAlarm;
+      if (!now.isBefore(n.alarmAt!) || (at != null && !now.isBefore(at))) {
+        ring(at != null && now.isBefore(n.alarmAt!) ? 'Koniec drzemki' : 'Limit drzemki');
+      }
+      return;
+    }
     final alarm = n.alarmAt!;
     if (!now.isBefore(alarm)) {
       ring('Godzina budzenia');
@@ -957,6 +1059,9 @@ class NightEngine extends ChangeNotifier {
     if (_minNoiseN > 0) await _flushMinute();
 
     await Strap.instance.stop();
+    await RoomSensor.instance.stop();
+    if (night?.id != null && maskEvents.isNotEmpty) await Db.instance.replaceExt(night!.id!, 'mic_', [...maskEvents]);
+    HomeAssistant.resetNight();
     await BakometrNative.cancelNotification(900);
     await BakometrNative.stopTracking();
     await BakometrNative.setKeepScreenOn(false);
@@ -1016,6 +1121,10 @@ class NightEngine extends ChangeNotifier {
       n.avgLux = lux.reduce((a, b) => a + b) / lux.length;
       n.maxLux = lux.reduce(max);
     }
+    final rt = ms.map((m) => m.roomTemp).whereType<double>().toList();
+    final rh = ms.map((m) => m.roomHum).whereType<double>().toList();
+    if (rt.isNotEmpty) n.roomTemp = rt.reduce((a, b) => a + b) / rt.length;
+    if (rh.isNotEmpty) n.roomHum = rh.reduce((a, b) => a + b) / rh.length;
     await Db.instance.updateNight(n);
     if (n.id != null && ms.isNotEmpty) await Db.instance.saveStages(n.id!, ms);
     dataChanged();
@@ -1028,7 +1137,7 @@ class NightEngine extends ChangeNotifier {
 
   static Future<int> reanalyzeAll() async {
     var c = 0;
-    for (final n in await Db.instance.nights()) {
+    for (final n in await Db.instance.nights(naps: true)) {
       final ms = await Db.instance.minutes(n.id!);
       if (ms.isEmpty) continue;
       final evs = await Db.instance.events(n.id!);

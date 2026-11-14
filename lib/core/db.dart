@@ -27,7 +27,7 @@ class Db {
     final dir = await getDatabasesPath();
     return openDatabase(
       p.join(dir, 'bakometr.db'),
-      version: 10,
+      version: 11,
       onUpgrade: (db, from, to) async {
         if (from < 2) {
           await db.execute('ALTER TABLE nights ADD COLUMN apnea_count INTEGER');
@@ -84,6 +84,15 @@ class Db {
         }
         if (from < 7) {
           await db.execute('ALTER TABLE nights ADD COLUMN stage_source TEXT');
+        }
+        if (from < 11) {
+          // drzemki, klimat w sypialni (termometr BLE), tekst mówienia przez sen
+          await db.execute('ALTER TABLE nights ADD COLUMN nap INTEGER');
+          await db.execute('ALTER TABLE nights ADD COLUMN room_temp REAL');
+          await db.execute('ALTER TABLE nights ADD COLUMN room_hum REAL');
+          await db.execute('ALTER TABLE minutes ADD COLUMN room_temp REAL');
+          await db.execute('ALTER TABLE minutes ADD COLUMN room_hum REAL');
+          await db.execute('ALTER TABLE events ADD COLUMN transcript TEXT');
         }
         if (from < 10) {
           // opaska na klatkę: HRV (RMSSD) i sekundy z ruchem tułowia
@@ -150,6 +159,9 @@ class Db {
             spo2_min REAL,
             spo2_avg REAL,
             odi REAL,
+            nap INTEGER,
+            room_temp REAL,
+            room_hum REAL,
             avg_lux REAL,
             max_lux REAL
           )''');
@@ -162,7 +174,8 @@ class Db {
             confidence REAL,
             clip_path TEXT,
             duration_ms INTEGER,
-            verified INTEGER
+            verified INTEGER,
+            transcript TEXT
           )''');
         await db.execute('''
           CREATE TABLE minutes(
@@ -186,6 +199,8 @@ class Db {
             rustle INTEGER,
             hrv REAL,
             strap_act INTEGER,
+            room_temp REAL,
+            room_hum REAL,
             stage INTEGER,
             PRIMARY KEY(night_id, idx)
           )''');
@@ -273,9 +288,12 @@ class Db {
   }
 
   /// Zakończone noce, od najnowszej.
-  Future<List<Night>> nights({int? limit}) async {
-    final r = await (await db).query('nights',
-        where: 'end_ts IS NOT NULL', orderBy: 'start DESC', limit: limit);
+  /// Zakończone noce (bez drzemek, chyba że [naps] — wtedy także drzemki; [onlyNaps] — tylko drzemki).
+  Future<List<Night>> nights({int? limit, bool naps = false, bool onlyNaps = false}) async {
+    final w = onlyNaps
+        ? 'end_ts IS NOT NULL AND nap = 1'
+        : (naps ? 'end_ts IS NOT NULL' : 'end_ts IS NOT NULL AND (nap IS NULL OR nap = 0)');
+    final r = await (await db).query('nights', where: w, orderBy: 'start DESC', limit: limit);
     return r.map(Night.fromMap).toList();
   }
 
@@ -284,6 +302,9 @@ class Db {
     final r = await (await db).query('nights', where: 'end_ts IS NULL');
     return r.map(Night.fromMap).toList();
   }
+
+  Future<void> setTranscript(int eventId, String? text) async =>
+      (await db).update('events', {'transcript': text}, where: 'id = ?', whereArgs: [eventId]);
 
   Future<void> deleteNight(int id) async {
     final d = await db;

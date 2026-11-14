@@ -11,6 +11,11 @@ import '../core/weather_impact.dart';
 import 'charts.dart';
 import 'metric_detail_screen.dart';
 import 'theme.dart';
+import 'cpap/cpap_screen.dart';
+import 'experiments_screen.dart';
+import 'factors_screen.dart';
+import 'position_screen.dart';
+import 'report_screen.dart';
 
 /// Statystyki w układzie Sleep Cycle: zakładki okresu i karta na każdą miarę z „Więcej ›”.
 class StatsScreen extends StatefulWidget {
@@ -105,6 +110,8 @@ class _StatsScreenState extends State<StatsScreen> {
       children: [
         title,
         PeriodTabs(value: period, onChanged: (p) => setState(() => period = p)),
+        const SizedBox(height: 12),
+        _tools(),
         const SizedBox(height: 16),
         for (final m in metrics) ...[
           _metricCard(m),
@@ -112,6 +119,27 @@ class _StatsScreenState extends State<StatsScreen> {
         ],
         ..._extras(nights, showFarts),
       ],
+    );
+  }
+
+  Widget _tools() {
+    Widget t(IconData i, String label, Widget Function() page) => Padding(
+          padding: const EdgeInsets.only(right: 8),
+          child: ActionChip(
+            avatar: Icon(i, size: 18),
+            label: Text(label),
+            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => page())),
+          ),
+        );
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(children: [
+        t(Icons.insights_outlined, 'Co wpływa na sen', () => const FactorsScreen()),
+        t(Icons.science_outlined, 'Eksperymenty', () => const ExperimentsScreen()),
+        t(Icons.airline_seat_flat_outlined, 'Pozycja i oddech', () => const PositionStatsScreen()),
+        t(Icons.picture_as_pdf_outlined, 'Raport dla lekarza', () => const ReportScreen()),
+        t(Icons.monitor_heart_outlined, 'Analiza CPAP', () => const CpapScreen()),
+      ]),
     );
   }
 

@@ -194,6 +194,36 @@ class BakometrNative {
     }
   }
 
+  static Future<bool> healthConnectHasLifePermission() async {
+    if (!Platform.isAndroid) return false;
+    try {
+      return await _ch.invokeMethod<bool>('hcHasLifePermission') ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  static Future<bool> healthConnectRequestLifePermission() async {
+    if (!Platform.isAndroid) return false;
+    try {
+      return await _ch.invokeMethod<bool>('hcRequestLifePermission') ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Treningi i posiłki z Health Connect: {exercise: [[start, end, typ, tytuł, pakiet]],
+  /// meals: [[czas, nazwa, kcal, rodzaj, kofeina mg]]} albo null.
+  static Future<Map<String, Object?>?> healthConnectReadLife(int startMs, int endMs) async {
+    if (!Platform.isAndroid) return null;
+    try {
+      final r = await _ch.invokeMethod<Map<Object?, Object?>>('hcReadLife', {'start': startMs, 'end': endMs});
+      return r?.map((k, v) => MapEntry(k.toString(), v));
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// Dane innych aplikacji (zegarka) z przedziału nocy:
   /// {hr: [[ms, bpm]], spo2: [[ms, %]], stages: [[start, end, stage]], sources: [pakiety]} albo null.
   static Future<Map<String, Object?>?> healthConnectReadNight(int startMs, int endMs) async {
@@ -207,6 +237,10 @@ class BakometrNative {
 
   /// Android: wybór karty SD aparatu ResMed; kopiuje STR.edf i *_EVE/*_PLD.edf z dni [from, to]
   /// (RRRRMMDD) do pamięci podręcznej. Zwraca ścieżki albo null (anulowano).
+  /// Mowa z nagrania WAV → tekst (Android 13+, iOS). Pusty tekst = nic nie rozpoznano.
+  static Future<String> transcribe(String path, {String lang = 'pl-PL'}) async =>
+      await _ch.invokeMethod<String>('transcribe', {'path': path, 'lang': lang}) ?? '';
+
   /// Włączenia ekranu (1), wyłączenia (0) i odblokowania (2) od [since] — tylko Android, w czasie nocy.
   static Future<List<(DateTime, int)>> screenEvents(DateTime since) async {
     if (!Platform.isAndroid) return const [];

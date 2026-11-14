@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import 'core/cloud.dart';
 import 'core/calibration.dart';
+import 'core/lifestyle.dart';
 import 'core/settings.dart';
 import 'core/watch_data.dart';
 import 'core/bus.dart';
@@ -93,7 +94,12 @@ class _BakometrAppState extends State<BakometrApp> {
       }
       unawaited(WeatherService.backfill());
       // dane z zegarka, potem kalibracja (fazy z zegarka, aparat CPAP, oceny nagrań)
-      unawaited(WatchNight.backfillRecent().catchError((_) => 0).then((_) => Calibration.run()).catchError((_) => CalibReport()));
+      unawaited(WatchNight.backfillRecent()
+          .catchError((_) => 0)
+          .then((_) => Lifestyle.backfill())
+          .catchError((_) => 0)
+          .then((_) => Calibration.run())
+          .catchError((_) => CalibReport()));
       // kopia/podgląd Koofr — w tle, bez wpływu na start
       unawaited(Future.delayed(const Duration(seconds: 5), Cloud.autoRun));
       unawaited(Cloud.init().then((_) => Cloud.startBackground()));

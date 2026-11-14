@@ -1,7 +1,9 @@
 import 'dart:math';
 import 'dart:async';
 
+import 'package:bakometr_native/bakometr_native.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:just_audio/just_audio.dart';
 
 import '../core/bus.dart';
@@ -18,6 +20,7 @@ import '../engine/night_engine.dart';
 import 'charts.dart';
 import 'clip_player.dart';
 import 'cpap/cpap_screen.dart';
+import 'factors_screen.dart';
 import 'strap_card.dart';
 import 'theme.dart';
 
@@ -302,6 +305,27 @@ class _NightDetailScreenState extends State<NightDetailScreen> {
           active: playingId == e.id,
           onSeek: (at) => _seekClip(e, at),
         ),
+        if (e.type == SoundType.talk) ...[
+          const SizedBox(height: 8),
+          if (e.transcript != null && e.transcript!.isNotEmpty)
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(color: C.surface, borderRadius: BorderRadius.circular(10)),
+              child: Text('„${e.transcript}”', style: const TextStyle(fontStyle: FontStyle.italic, height: 1.35)),
+            )
+          else if (e.transcript == '')
+            const Text('Nie rozpoznano słów (mamrotanie albo za cicho).', style: TextStyle(fontSize: 12, color: C.muted)),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              onPressed: _transcribing.contains(e.id) ? null : () => _transcribe(e),
+              icon: _transcribing.contains(e.id)
+                  ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                  : const Icon(Icons.subtitles_outlined, size: 18),
+              label: Text(e.transcript == null ? 'Zamień mowę na tekst' : 'Rozpoznaj ponownie'),
+            ),
+          ),
+        ],
         if (facts.isNotEmpty) ...[
           const SizedBox(height: 8),
           const Text('W tym czasie', style: TextStyle(fontSize: 11, color: C.muted)),
@@ -317,6 +341,24 @@ class _NightDetailScreenState extends State<NightDetailScreen> {
         ],
       ]),
     );
+  }
+
+  final Set<int?> _transcribing = {};
+
+  Future<void> _transcribe(SoundEvent e) async {
+    if (e.clipPath == null || e.id == null) return;
+    setState(() => _transcribing.add(e.id));
+    try {
+      final t = await BakometrNative.transcribe(e.clipPath!);
+      e.transcript = t.trim();
+      await Db.instance.setTranscript(e.id!, e.transcript);
+    } catch (err) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(err is PlatformException ? (err.message ?? '$err') : '$err')));
+      }
+    } finally {
+      if (mounted) setState(() => _transcribing.remove(e.id));
+    }
   }
 
   List<DateTime> get _cpapTimes => [
@@ -494,6 +536,40 @@ class _NightDetailScreenState extends State<NightDetailScreen> {
     );
   }
 
+  Widget _roomCard(Night night) {
+    final t = [for (final m in ms) m.roomTemp ?? double.nan];
+    final h = [for (final m in ms) m.roomHum ?? double.nan];
+    final tv = t.where((x) => !x.isNaN).toList(), hv = h.where((x) => !x.isNaN).toList();
+    String r(List<double> v, int d) => v.isEmpty ? '—' : '${v.reduce(min).toStringAsFixed(d)}–${v.reduce(max).toStringAsFixed(d)}';
+    return Section(
+      title: 'Sypialnia 🌡️',
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        TileGrid(columns: 2, children: [
+          StatTile(
+              label: 'Temperatura',
+              value: night.roomTemp == null ? '—' : '${night.roomTemp!.toStringAsFixed(1)} °C',
+              sub: 'zakres ${r(tv, 1)}',
+              color: (night.roomTemp ?? 18) > 21 ? C.moon : C.text),
+          StatTile(
+              label: 'Wilgotność',
+              value: night.roomHum == null ? '—' : '${night.roomHum!.round()}%',
+              sub: 'zakres ${r(hv, 0)}',
+              color: (night.roomHum ?? 50) < 35 || (night.roomHum ?? 50) > 65 ? C.moon : C.text),
+        ]),
+        const SizedBox(height: 8),
+        LineSeriesChart(
+            values: [for (final x in t) x.isNaN ? null : x].whereType<double>().toList(),
+            color: const Color(0xFFFF8F6B),
+            height: 80,
+            showAverage: false,
+            zeroBased: false),
+        const SizedBox(height: 4),
+        const Text('Najlepiej śpi się zwykle w 16–19 °C i przy wilgotności 40–60%.',
+            style: TextStyle(fontSize: 11, color: C.muted)),
+      ]),
+    );
+  }
+
   Widget _cpapCard(Night night) {
     String f(double? v, String unit, [int dec = 1]) => v == null ? '—' : '${v.toStringAsFixed(dec)}$unit';
     final ahi = night.cpapAhi;
@@ -528,6 +604,18 @@ class _NightDetailScreenState extends State<NightDetailScreen> {
         TextButton(onPressed: () => _editCpap(night), child: Text(ahi == null ? 'Dodaj' : 'Edytuj')),
       ]),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        if (ext.any((r) => r.$2.startsWith('mic_')))
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Text(
+              '🔔 Przypomnienia o masce: '
+              '${[
+                for (final r in ext)
+                  if (r.$2.startsWith('mic_')) '${hhmm(r.$1)} ${r.$2 == 'mic_off' ? 'aparat ucichł' : 'syk'}'
+              ].join(' · ')}',
+              style: const TextStyle(fontSize: 12, color: C.moon),
+            ),
+          ),
         TileGrid(columns: 3, children: [
           StatTile(
             label: 'AHI z aparatu',
@@ -849,8 +937,13 @@ class _NightDetailScreenState extends State<NightDetailScreen> {
             StrapCard(night: night, minutes: ms, ext: ext, polarAf: polarAf),
           ],
           const SizedBox(height: 12),
+          if (!night.nap) NightInsightsCard(key: ValueKey('ins-${night.id}'), night: night),
           if (night.cpap) ...[
             _cpapCard(night),
+            const SizedBox(height: 12),
+          ],
+          if (ms.any((m) => m.roomTemp != null)) ...[
+            _roomCard(night),
             const SizedBox(height: 12),
           ],
           _breathingCard(night),

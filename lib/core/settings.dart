@@ -170,6 +170,39 @@ class Settings extends ChangeNotifier {
   bool get watchData => _b('watchData', false);
   set watchData(bool v) => _set('watchData', v);
 
+  // --- Home Assistant: świt i ściemnianie ---
+  bool get haOn => _b('haOn', false);
+  set haOn(bool v) => _set('haOn', v);
+  String get haUrl => _s('haUrl', '');
+  set haUrl(String v) => _set('haUrl', v);
+  /// Encje świateł, oddzielone przecinkami (np. light.sypialnia).
+  String get haLights => _s('haLights', '');
+  set haLights(String v) => _set('haLights', v);
+  int get haSunriseMin => _i('haSunriseMin', 20);
+  set haSunriseMin(int v) => _set('haSunriseMin', v);
+  bool get haDimAtStart => _b('haDimAtStart', true);
+  set haDimAtStart(bool v) => _set('haDimAtStart', v);
+
+  // --- Termometr w sypialni (BLE) ---
+  bool get roomSensorOn => _b('roomOn', false);
+  set roomSensorOn(bool v) => _set('roomOn', v);
+  String get roomSensorId => _s('roomId', '');
+  set roomSensorId(String v) => _set('roomId', v);
+  String get roomSensorName => _s('roomName', '');
+  set roomSensorName(String v) => _set('roomName', v);
+
+  // --- Maska CPAP na żywo ---
+  bool get maskAlerts => _b('maskAlerts', true);
+  set maskAlerts(bool v) => _set('maskAlerts', v);
+
+  // --- Treningi i posiłki z Health Connect ---
+  bool get lifestyleOn => _b('lifestyleOn', false);
+  set lifestyleOn(bool v) => _set('lifestyleOn', v);
+
+  /// Eksperymenty (JSON).
+  String get experimentsJson => _s('experiments', '');
+  set experimentsJson(String v) => _set('experiments', v);
+
   /// Ile dni wstecz trzymać pełny zapis oddechu z aparatu CPAP (pliki BRP); 0 = wszystkie.
   int get cpapWaveDays => _i('cpapWaveDays', 90);
   set cpapWaveDays(int v) => _set('cpapWaveDays', v);

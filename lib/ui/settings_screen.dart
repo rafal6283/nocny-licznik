@@ -20,6 +20,10 @@ import '../core/settings.dart';
 import '../core/strap.dart';
 import '../core/weather.dart';
 import 'cloud_screen.dart';
+import 'package:flutter_blue_plus/flutter_blue_plus.dart';
+import '../core/home_assistant.dart';
+import '../core/lifestyle.dart';
+import '../core/room_sensor.dart';
 import '../cpap/cpap_data.dart';
 import '../cpap/cpap_import.dart';
 import 'accuracy_screen.dart';
@@ -175,6 +179,99 @@ class _SettingsScreenState extends State<SettingsScreen> {
     } finally {
       if (mounted) setState(() => _sdBusy = false);
     }
+  }
+
+  Future<void> _pickThermometer() async {
+    final found = ValueNotifier<Map<String, (String, String)>>({}); // id → (nazwa, odczyt)
+    final sub = FlutterBluePlus.onScanResults.listen((rs) {
+      final m = Map<String, (String, String)>.of(found.value);
+      for (final r in rs) {
+        if (!RoomSensor.looksLikeThermometer(r)) continue;
+        final name = r.advertisementData.advName.isNotEmpty ? r.advertisementData.advName : r.device.platformName;
+        final v = RoomSensor.parseAdvert(r.advertisementData);
+        m[r.device.remoteId.str] = (
+          name.isEmpty ? r.device.remoteId.str : name,
+          v == null ? 'odczyt po połączeniu' : '${v.temp.toStringAsFixed(1)} °C, ${v.hum.round()}%'
+        );
+      }
+      found.value = m;
+    });
+    try {
+      await FlutterBluePlus.startScan(timeout: const Duration(seconds: 25));
+    } catch (_) {}
+    if (!mounted) return;
+    final picked = await showDialog<(String, String)>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Termometry w pobliżu'),
+        content: SizedBox(
+          width: 320,
+          child: ValueListenableBuilder<Map<String, (String, String)>>(
+            valueListenable: found,
+            builder: (_, m, __) => m.isEmpty
+                ? const Text('Szukam… Termometr powinien być blisko telefonu.')
+                : Column(mainAxisSize: MainAxisSize.min, children: [
+                    for (final e in m.entries)
+                      ListTile(
+                        title: Text(e.value.$1),
+                        subtitle: Text('${e.value.$2} · ${e.key}'),
+                        onTap: () => Navigator.pop(ctx, (e.key, e.value.$1)),
+                      ),
+                  ]),
+          ),
+        ),
+        actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Anuluj'))],
+      ),
+    );
+    await sub.cancel();
+    try {
+      await FlutterBluePlus.stopScan();
+    } catch (_) {}
+    if (picked == null) return;
+    setState(() {
+      s.roomSensorId = picked.$1;
+      s.roomSensorName = picked.$2;
+      s.roomSensorOn = true;
+    });
+    _snack('Sprawdzam odczyt…');
+    final r = await RoomSensor.instance.readOnce(picked.$1);
+    if (r != null) RoomSensor.instance.last.value = r;
+    _snack(r == null ? 'Nie udało się odczytać — termometr zbyt daleko?' : 'Odczyt: ${r.temp.toStringAsFixed(1)} °C, ${r.hum.round()}%');
+  }
+
+  Future<void> _haSetup() async {
+    final url = TextEditingController(text: s.haUrl.isEmpty ? 'http://homeassistant.local:8123' : s.haUrl);
+    final tok = TextEditingController(text: await HomeAssistant.token());
+    final lights = TextEditingController(text: s.haLights);
+    if (!mounted) return;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Home Assistant'),
+        content: SingleChildScrollView(
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            TextField(controller: url, decoration: const InputDecoration(labelText: 'Adres (np. http://192.168.1.10:8123)')),
+            TextField(
+              controller: tok,
+              obscureText: true,
+              decoration: const InputDecoration(labelText: 'Token długoterminowy (Profil → Bezpieczeństwo)'),
+            ),
+            TextField(controller: lights, decoration: const InputDecoration(labelText: 'Światła (np. light.sypialnia, light.nocna)')),
+          ]),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Anuluj')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Zapisz')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    s.haUrl = url.text.trim();
+    s.haLights = lights.text.trim();
+    await HomeAssistant.setToken(tok.text);
+    setState(() {});
+    final r = await HomeAssistant.test();
+    _snack(r ?? 'Połączono — światła powinny się rozjaśnić i przygasić.');
   }
 
   void _snack(String t) {
@@ -507,6 +604,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
               value: s.cpapDefault,
               onChanged: (v) => s.cpapDefault = v,
             ),
+            SwitchListTile(
+              title: const Text('Przypomnienia o masce'),
+              subtitle: const Text('W trybie CPAP mikrofon słyszy, gdy aparat ucichnie (maska zdjęta) albo maska '
+                  'mocno syczy — wtedy delikatna wibracja (maks. kilka razy na noc)'),
+              value: s.maskAlerts,
+              onChanged: (v) => setState(() => s.maskAlerts = v),
+            ),
             ListTile(
               leading: _sdBusy
                   ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2))
@@ -549,6 +653,102 @@ class _SettingsScreenState extends State<SettingsScreen> {
               subtitle: const Text('Eksport „Summary” z programu OSCAR (karta SD z ResMed, Philips i in.) — '
                   'AHI, nieszczelność i czas użycia trafią do odpowiednich nocy'),
               onTap: _importCpap,
+            ),
+          ]),
+        ),
+
+        _head('Sypialnia i dom'),
+        Card(
+          child: Column(children: [
+            SwitchListTile(
+              title: const Text('Termometr w sypialni (Bluetooth)'),
+              subtitle: Text(s.roomSensorId.isEmpty
+                  ? 'Xiaomi LYWSD03MMC / MHO-C401 (oryginał lub ATC/pvvx/BTHome) — temperatura i wilgotność co 5 min'
+                  : 'Wybrany: ${s.roomSensorName.isEmpty ? s.roomSensorId : s.roomSensorName}'),
+              value: s.roomSensorOn,
+              onChanged: (v) async {
+                setState(() => s.roomSensorOn = v);
+                if (v && s.roomSensorId.isEmpty) await _pickThermometer();
+              },
+            ),
+            if (s.roomSensorOn)
+              ListTile(
+                leading: const Icon(Icons.thermostat),
+                title: const Text('Wybierz / sprawdź termometr'),
+                subtitle: ValueListenableBuilder(
+                  valueListenable: RoomSensor.instance.last,
+                  builder: (_, r, __) => Text(r == null
+                      ? 'Dotknij, aby wyszukać'
+                      : 'Ostatni odczyt: ${r.temp.toStringAsFixed(1)} °C, ${r.hum.round()}% (${hhmm(r.at)})'),
+                ),
+                onTap: _pickThermometer,
+              ),
+            const Divider(height: 1),
+            SwitchListTile(
+              title: const Text('Światła przez Home Assistant'),
+              subtitle: const Text('Ściemnienie przy „Dobranoc” i świt przed budzikiem (żarówki podłączone do HA)'),
+              value: s.haOn,
+              onChanged: (v) => setState(() => s.haOn = v),
+            ),
+            if (s.haOn) ...[
+              ListTile(
+                leading: const Icon(Icons.home_outlined),
+                title: const Text('Połączenie z Home Assistant'),
+                subtitle: Text(s.haUrl.isEmpty ? 'Adres, token i światła' : '${s.haUrl} · ${s.haLights}'),
+                onTap: _haSetup,
+              ),
+              ListTile(
+                title: const Text('Świt przed budzikiem'),
+                subtitle: const Text('Jasność rośnie co minutę, barwa z ciepłej do dziennej'),
+                trailing: DropdownButton<int>(
+                  value: const [0, 10, 20, 30, 45].contains(s.haSunriseMin) ? s.haSunriseMin : 20,
+                  underline: const SizedBox(),
+                  items: const [
+                    DropdownMenuItem(value: 0, child: Text('wył.')),
+                    DropdownMenuItem(value: 10, child: Text('10 min')),
+                    DropdownMenuItem(value: 20, child: Text('20 min')),
+                    DropdownMenuItem(value: 30, child: Text('30 min')),
+                    DropdownMenuItem(value: 45, child: Text('45 min')),
+                  ],
+                  onChanged: (v) => setState(() => s.haSunriseMin = v ?? 20),
+                ),
+              ),
+              SwitchListTile(
+                title: const Text('Ściemnianie przy „Dobranoc”'),
+                subtitle: const Text('Ciepłe 8% na 3 min, potem powoli gaśnie'),
+                value: s.haDimAtStart,
+                onChanged: (v) => setState(() => s.haDimAtStart = v),
+              ),
+              ListTile(
+                leading: const Icon(Icons.lightbulb_outline),
+                title: const Text('Test świateł'),
+                onTap: () async {
+                  final r = await HomeAssistant.test();
+                  _snack(r ?? 'Działa — światła powinny się rozjaśnić i przygasić.');
+                },
+              ),
+            ],
+            const Divider(height: 1),
+            SwitchListTile(
+              title: const Text('Treningi i posiłki (Health Connect)'),
+              subtitle: const Text('Z Formy, Dziennika talerza, Huawei/Health Sync i in.: treningi, pora i kalorie '
+                  'kolacji, kawa i alkohol (rozpoznane po nazwie) — jako czynniki wpływające na sen'),
+              value: s.lifestyleOn,
+              onChanged: (v) async {
+                if (v) {
+                  final ok = await BakometrNative.healthConnectHasLifePermission() ||
+                      await BakometrNative.healthConnectRequestLifePermission();
+                  if (!ok) {
+                    _snack('Brak zgody Health Connect na odczyt treningów i odżywiania.');
+                    return;
+                  }
+                }
+                setState(() => s.lifestyleOn = v);
+                if (v) {
+                  final n = await Lifestyle.backfill();
+                  _snack('Uzupełniono $n nocy o treningi i posiłki.');
+                }
+              },
             ),
           ]),
         ),
@@ -775,7 +975,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
         ),
         const SizedBox(height: 16),
-        const Center(child: Text('Rytm Snu 2.24.1', style: TextStyle(color: C.muted, fontSize: 12))),
+        const Center(child: Text('Rytm Snu 2.25', style: TextStyle(color: C.muted, fontSize: 12))),
       ],
     );
   }

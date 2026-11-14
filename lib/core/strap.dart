@@ -501,7 +501,7 @@ class PolarNights {
     if (recs.isEmpty) return 0;
     final since = DateTime.now().subtract(const Duration(days: 21));
     var done = 0;
-    for (final n in await Db.instance.nights(limit: 40)) {
+    for (final n in await Db.instance.nights(limit: 40, naps: true)) {
       if (n.id == null || n.end == null || n.start.isBefore(since)) continue;
       if (NightEngine.instance.night?.id == n.id) continue;
       final ext = await Db.instance.ext(n.id!);

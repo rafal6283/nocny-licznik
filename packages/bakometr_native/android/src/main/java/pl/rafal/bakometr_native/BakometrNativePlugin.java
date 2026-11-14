@@ -88,6 +88,12 @@ public class BakometrNativePlugin implements FlutterPlugin, MethodChannel.Method
                 result.success(null);
                 break;
             }
+            case "transcribe": {
+                String path = call.argument("path");
+                String lang = call.argument("lang");
+                SpeechTranscriber.transcribe(ctx, path, lang != null ? lang : "pl-PL", result);
+                return;
+            }
             case "screenEvents": {
                 Number since = call.argument("since");
                 result.success(ScreenEvents.since(since == null ? 0 : since.longValue()));

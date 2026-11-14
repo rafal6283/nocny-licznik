@@ -32,7 +32,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
   }
 
   Future<void> _load() async {
-    final r = await Db.instance.nights();
+    final r = await Db.instance.nights(naps: true);
     if (mounted) setState(() => nights = r);
   }
 
@@ -85,7 +85,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
                 const SizedBox(width: 14),
                 Expanded(
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text(dayLabel(nightOf(n.start)), style: const TextStyle(fontWeight: FontWeight.w700)),
+                    Text(n.nap ? '💤 Drzemka · ${dayLabel(n.start)}' : dayLabel(nightOf(n.start)),
+                        style: const TextStyle(fontWeight: FontWeight.w700)),
                     Text('${hhmm(n.start)}–${n.end != null ? hhmm(n.end!) : '?'} · ${durHM(n.durationMin)} snu',
                         style: const TextStyle(color: C.muted, fontSize: 12)),
                     if (n.tags.isNotEmpty)

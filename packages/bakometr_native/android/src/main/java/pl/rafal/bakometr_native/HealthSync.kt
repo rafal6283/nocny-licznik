@@ -8,7 +8,9 @@ import android.util.Log
 import androidx.health.connect.client.HealthConnectClient
 import androidx.health.connect.client.PermissionController
 import androidx.health.connect.client.permission.HealthPermission
+import androidx.health.connect.client.records.ExerciseSessionRecord
 import androidx.health.connect.client.records.HeartRateRecord
+import androidx.health.connect.client.records.NutritionRecord
 import androidx.health.connect.client.records.HeartRateVariabilityRmssdRecord
 import androidx.health.connect.client.records.RespiratoryRateRecord
 import androidx.health.connect.client.records.RestingHeartRateRecord
@@ -56,6 +58,12 @@ class HealthSync(private val ctx: Context) : PluginRegistry.ActivityResultListen
             HealthPermission.getReadPermission(OxygenSaturationRecord::class),
             HealthPermission.getReadPermission(SleepSessionRecord::class),
         )
+
+        /** Odczyt treningów i posiłków (np. Forma, Dziennik talerza, Huawei przez Health Sync) — czynniki snu. */
+        val LIFE_PERMS = setOf(
+            HealthPermission.getReadPermission(ExerciseSessionRecord::class),
+            HealthPermission.getReadPermission(NutritionRecord::class),
+        )
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
@@ -75,6 +83,13 @@ class HealthSync(private val ctx: Context) : PluginRegistry.ActivityResultListen
                 scope.launch { result.success(writeVitals(nights)) }
             }
             "hcRequestReadPermission" -> request(activity, result, READ_PERMS)
+            "hcHasLifePermission" -> scope.launch { result.success(granted(LIFE_PERMS)) }
+            "hcRequestLifePermission" -> request(activity, result, LIFE_PERMS)
+            "hcReadLife" -> {
+                val from = (call.argument<Number>("start"))?.toLong() ?: 0L
+                val to = (call.argument<Number>("end"))?.toLong() ?: 0L
+                scope.launch { result.success(readLife(from, to)) }
+            }
             "hcReadNight" -> {
                 val from = (call.argument<Number>("start"))?.toLong() ?: 0L
                 val to = (call.argument<Number>("end"))?.toLong() ?: 0L
@@ -296,6 +311,30 @@ class HealthSync(private val ctx: Context) : PluginRegistry.ActivityResultListen
      * Zwraca: {hr: [[ms, bpm]], spo2: [[ms, %]], stages: [[start, end, stage]], sources: [pakiety]}
      * albo null przy braku zgody / błędzie.
      */
+    /** Treningi [start, koniec, typ, tytuł, kcal?] i posiłki [czas, nazwa, kcal, rodzaj posiłku]. */
+    private suspend fun readLife(fromMs: Long, toMs: Long): Map<String, Any?>? {
+        if (toMs <= fromMs || !granted(LIFE_PERMS)) return null
+        val from = Instant.ofEpochMilli(fromMs)
+        val to = Instant.ofEpochMilli(toMs)
+        return try {
+            val client = HealthConnectClient.getOrCreate(ctx)
+            val ex = ArrayList<List<Any?>>()
+            for (r in readAll(client, ExerciseSessionRecord::class, from, to)) {
+                ex.add(listOf(r.startTime.toEpochMilli(), r.endTime.toEpochMilli(), r.exerciseType, r.title ?: "",
+                    r.metadata.dataOrigin.packageName))
+            }
+            val meals = ArrayList<List<Any?>>()
+            for (r in readAll(client, NutritionRecord::class, from, to)) {
+                meals.add(listOf(r.startTime.toEpochMilli(), r.name ?: "", r.energy?.inKilocalories ?: 0.0, r.mealType,
+                    r.caffeine?.inMilligrams ?: 0.0))
+            }
+            mapOf("exercise" to ex, "meals" to meals)
+        } catch (e: Exception) {
+            Log.w(TAG, "readLife: $e")
+            null
+        }
+    }
+
     private suspend fun readNight(fromMs: Long, toMs: Long): Map<String, Any?>? {
         if (toMs <= fromMs || !granted(READ_PERMS)) return null
         val from = Instant.ofEpochMilli(fromMs)

@@ -138,6 +138,8 @@ def patch_ios():
         "żeby oszacować jasność w sypialni. Żadne zdjęcia nie są zapisywane.")
     pl["NSBluetoothAlwaysUsageDescription"] = (
         "Rytm Snu łączy się z opaską na klatkę piersiową (np. Polar H10), żeby zapisać tętno i rytm serca w nocy.")
+    pl["NSSpeechRecognitionUsageDescription"] = (
+        "Rytm Snu może zamienić nagrania mówienia przez sen na tekst. Rozpoznawanie działa na telefonie, gdy to możliwe.")
     modes = set(pl.get("UIBackgroundModes", []))
     modes.add("audio")
     modes.add("bluetooth-central")

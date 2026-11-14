@@ -94,6 +94,8 @@ class Night {
   double? maxNoise; // najgłośniejsze 0,5 s nocy w dBFS
   double? avgLux;
   double? maxLux;
+  bool nap; // drzemka (poza statystykami nocy)
+  double? roomTemp, roomHum; // klimat w sypialni (termometr BLE), średnie
 
   Night({
     this.id,
@@ -154,6 +156,9 @@ class Night {
     this.odi,
     this.avgLux,
     this.maxLux,
+    this.nap = false,
+    this.roomTemp,
+    this.roomHum,
   }) : tags = tags ?? [];
 
   bool get finished => end != null;
@@ -217,6 +222,9 @@ class Night {
         'max_noise': maxNoise,
         'avg_lux': avgLux,
         'max_lux': maxLux,
+        'nap': nap ? 1 : 0,
+        'room_temp': roomTemp,
+        'room_hum': roomHum,
       };
 
   static DateTime? _dt(Object? v) => v == null ? null : DateTime.fromMillisecondsSinceEpoch(v as int);
@@ -277,6 +285,9 @@ class Night {
         spo2Min: (m['spo2_min'] as num?)?.toDouble(),
         spo2Avg: (m['spo2_avg'] as num?)?.toDouble(),
         odi: (m['odi'] as num?)?.toDouble(),
+        nap: (m['nap'] as int?) == 1,
+        roomTemp: (m['room_temp'] as num?)?.toDouble(),
+        roomHum: (m['room_hum'] as num?)?.toDouble(),
         maxNoise: (m['max_noise'] as num?)?.toDouble(),
         avgLux: (m['avg_lux'] as num?)?.toDouble(),
         maxLux: (m['max_lux'] as num?)?.toDouble(),
@@ -294,6 +305,7 @@ class SoundEvent {
 
   /// null = niezweryfikowane, true = potwierdzone, false = odrzucone (fałszywy alarm)
   bool? verified;
+  String? transcript; // mówienie przez sen zamienione na tekst
 
   SoundEvent({
     this.id,
@@ -304,6 +316,7 @@ class SoundEvent {
     this.clipPath,
     this.durationMs = 0,
     this.verified,
+    this.transcript,
   });
 
   /// Liczy się do wyniku: ocena ręczna ma pierwszeństwo, potem wyuczony próg pewności.
@@ -318,6 +331,7 @@ class SoundEvent {
         'clip_path': clipPath,
         'duration_ms': durationMs,
         'verified': verified == null ? null : (verified! ? 1 : 0),
+        'transcript': transcript,
       };
 
   factory SoundEvent.fromMap(Map<String, Object?> m) => SoundEvent(
@@ -329,6 +343,7 @@ class SoundEvent {
         clipPath: m['clip_path'] as String?,
         durationMs: (m['duration_ms'] as int?) ?? 0,
         verified: m['verified'] == null ? null : (m['verified'] as int) == 1,
+        transcript: m['transcript'] as String?,
       );
 }
 
@@ -349,6 +364,7 @@ class MinuteSample {
   final int apneas;
   final int sounds; // inne zdarzenia dźwiękowe (mowa, kaszel) — oznaka płytkiego snu/czuwania
   final int? activeSec; // sekundy minuty z ruchem wg akcelerometru (aktygrafia), null = brak danych
+  final double? roomTemp, roomHum; // termometr w sypialni (BLE)
   final int screen; // 0 = ekran wyłączony, 1 = ekran się włączył, 2 = telefon odblokowany
   final int rustle; // krótkie głośne dźwięki (szelest pościeli) w minucie, w półsekundach
   final double? hrv; // opaska: RMSSD odstępów RR w minucie [ms]
@@ -371,6 +387,8 @@ class MinuteSample {
     this.apneas = 0,
     this.sounds = 0,
     this.activeSec,
+    this.roomTemp,
+    this.roomHum,
     this.screen = 0,
     this.rustle = 0,
     this.hrv,
@@ -395,6 +413,8 @@ class MinuteSample {
         'apneas': apneas,
         'sounds': sounds,
         'active_sec': activeSec,
+        'room_temp': roomTemp,
+        'room_hum': roomHum,
         'screen': screen,
         'rustle': rustle,
         'hrv': hrv,
@@ -418,6 +438,8 @@ class MinuteSample {
         apneas: (m['apneas'] as int?) ?? 0,
         sounds: (m['sounds'] as int?) ?? 0,
         activeSec: m['active_sec'] as int?,
+        roomTemp: (m['room_temp'] as num?)?.toDouble(),
+        roomHum: (m['room_hum'] as num?)?.toDouble(),
         screen: (m['screen'] as int?) ?? 0,
         rustle: (m['rustle'] as int?) ?? 0,
         hrv: (m['hrv'] as num?)?.toDouble(),

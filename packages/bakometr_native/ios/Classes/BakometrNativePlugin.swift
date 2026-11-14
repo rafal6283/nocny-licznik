@@ -1,5 +1,6 @@
 import AVFoundation
 import AudioToolbox
+import Speech
 import Flutter
 import UIKit
 import UserNotifications
@@ -13,12 +14,47 @@ public class BakometrNativePlugin: NSObject, FlutterPlugin {
     registrar.addMethodCallDelegate(instance, channel: channel)
   }
 
+  /// Mowa z nagrania → tekst (na urządzeniu, jeśli dostępne).
+  private func transcribe(path: String, lang: String, result: @escaping FlutterResult) {
+    SFSpeechRecognizer.requestAuthorization { status in
+      DispatchQueue.main.async {
+        guard status == .authorized else {
+          result(FlutterError(code: "perm", message: "Brak zgody na rozpoznawanie mowy", details: nil))
+          return
+        }
+        guard let rec = SFSpeechRecognizer(locale: Locale(identifier: lang)), rec.isAvailable else {
+          result(FlutterError(code: "unavailable", message: "Rozpoznawanie mowy niedostępne", details: nil))
+          return
+        }
+        let req = SFSpeechURLRecognitionRequest(url: URL(fileURLWithPath: path))
+        if rec.supportsOnDeviceRecognition { req.requiresOnDeviceRecognition = true }
+        req.shouldReportPartialResults = false
+        var done = false
+        rec.recognitionTask(with: req) { res, err in
+          if done { return }
+          if let res = res, res.isFinal {
+            done = true
+            result(res.bestTranscription.formattedString)
+          } else if err != nil {
+            done = true
+            result("")
+          }
+        }
+      }
+    }
+  }
+
   public func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
     let args = call.arguments as? [String: Any] ?? [:]
     switch call.method {
     case "startTracking", "updateTracking", "stopTracking":
       // Na iOS działanie w tle zapewnia aktywna sesja nagrywania (UIBackgroundModes: audio).
       result(nil)
+
+    case "transcribe":
+      let path = args["path"] as? String ?? ""
+      let lang = args["lang"] as? String ?? "pl-PL"
+      transcribe(path: path, lang: lang, result: result)
 
     case "canMeasureLuxInBackground":
       result(false)

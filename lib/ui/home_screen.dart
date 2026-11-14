@@ -11,7 +11,9 @@ import '../core/settings.dart';
 import '../core/stats_util.dart';
 import '../engine/night_engine.dart';
 import 'charts.dart';
+import '../core/experiments.dart';
 import 'diagnostics_screen.dart';
+import 'experiments_screen.dart';
 import 'placement_check_screen.dart';
 import 'theme.dart';
 
@@ -105,9 +107,36 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     }
   }
 
-  Future<void> _start() async {
+  Future<void> _nap() async {
+    final min = await showModalBottomSheet<int>(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          const Padding(
+            padding: EdgeInsets.fromLTRB(20, 18, 20, 4),
+            child: Text('Drzemka 💤', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+          ),
+          const Padding(
+            padding: EdgeInsets.fromLTRB(20, 0, 20, 8),
+            child: Text(
+              'Budzik liczy czas od zaśnięcia (5 spokojnych minut), najpóźniej 30 min po starcie. '
+              '20 min — regeneracja bez snu głębokiego; 90 min — pełny cykl.',
+              style: TextStyle(color: C.muted, fontSize: 12, height: 1.4),
+            ),
+          ),
+          for (final (m, t) in [(10, '10 min — szybki reset'), (20, '20 min — power nap'), (30, '30 min'), (45, '45 min'), (90, '90 min — pełny cykl')])
+            ListTile(leading: const Icon(Icons.timer_outlined), title: Text(t), onTap: () => Navigator.pop(ctx, m)),
+          const SizedBox(height: 8),
+        ]),
+      ),
+    );
+    if (min != null) await _start(napMin: min);
+  }
+
+  Future<void> _start({int napMin = 0}) async {
     setState(() => starting = true);
     final plan = NightPlan(
+      napMin: napMin,
       alarmAt: s.alarmEnabled ? nextOccurrence(s.alarmHour, s.alarmMinute) : null,
       smartWindowMin: s.smartWindowMin,
       tags: s.tonightTags,
@@ -227,6 +256,20 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         ),
         const SizedBox(height: 12),
 
+        // --- Eksperyment: wariant na dziś ---
+        if (Experiments.tonight() case (final e, final arm))
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: Section(
+              title: '🧪 ${e.name}',
+              trailing: TextButton(
+                onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ExperimentsScreen())),
+                child: const Text('Szczegóły'),
+              ),
+              child: Text('Dziś wariant $arm: ${e.armLabel(arm)}',
+                  style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+            ),
+          ),
         // --- Dzisiejsza noc: tagi (tylko gdy liczymy wiatry) i światło ---
         if (s.detectFarts) ...[
           Section(
@@ -344,13 +387,18 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           textAlign: TextAlign.center,
           style: TextStyle(fontSize: 12, color: C.muted),
         ),
-        Center(
-          child: TextButton.icon(
+        Wrap(alignment: WrapAlignment.center, children: [
+          TextButton.icon(
+            onPressed: starting ? null : _nap,
+            icon: const Icon(Icons.bedtime_outlined, size: 18),
+            label: const Text('Drzemka'),
+          ),
+          TextButton.icon(
             onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PlacementCheckScreen())),
             icon: const Icon(Icons.phone_android, size: 18),
-            label: const Text('Sprawdź ustawienie telefonu (50 s)'),
+            label: const Text('Ustawienie telefonu'),
           ),
-        ),
+        ]),
         const SizedBox(height: 20),
 
         // --- Dług snu i ostatnia noc ---
