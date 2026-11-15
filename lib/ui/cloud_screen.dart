@@ -977,7 +977,8 @@ class _ExchangeCardState extends State<_ExchangeCard> {
           secondary: const Icon(Icons.swap_horiz),
           title: const Text('Wymiana z moimi aplikacjami'),
           subtitle: Text('${Settings.instance.detectFarts ? 'FF → Kreska, Doba i Dziennik talerza. ' : ''}'
-              'Podsumowanie snu → Polar EKG (co poprzedza napady AF). Aplikacje pobiorą dane same przez Koofr, '
+              'Nieregularny rytm z opaski → Doba. Podsumowanie snu → Polar EKG (co poprzedza napady AF). '
+              'Aplikacje pobiorą dane same przez Koofr, '
               'widzą je tylko Twoje aplikacje (ten sam kod odzyskiwania).'),
           value: v,
           onChanged: (x) async {
@@ -989,6 +990,7 @@ class _ExchangeCardState extends State<_ExchangeCard> {
               try {
                 await Cloud.sync.removeExchange('rytm-snu');
                 await Cloud.sync.removeExchange('czynniki-sen');
+                await Cloud.sync.removeExchange('rytm-snu-rytm');
               } catch (_) {}
             }
           },

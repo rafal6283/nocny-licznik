@@ -169,6 +169,11 @@ class Cloud {
       await sync.removeExchange('rytm-snu');
       msg = 'licznik FF wyłączony';
     }
+    // rytm serca z opaski (nieregularny rytm) dla Doby — zawsze, niezależnie od wiatrów
+    try {
+      final (rb, nAf) = await buildRhythmExchange();
+      if (await sync.publishExchange('rytm-snu-rytm', rb, force: force)) msg = '$msg · wysłano rytm ($nAf)';
+    } catch (_) {}
     // napady AF i noce z Polar EKG – na wykres nocy (tętno i rytm); w tle tylko wysyłamy
     try {
       if (_background) throw StateError('w tle bez pobierania');

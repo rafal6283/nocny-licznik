@@ -13,7 +13,7 @@ import 'models.dart';
 ///   (do wersji 2.8 źródło nazywało się "nocny-licznik" — aplikacje odbierające akceptują oba)
 ///   "windows": [{"start": ms, "end": ms}],     // noce, w których aplikacja nasłuchiwała
 ///   "events":  [{"id": "...", "type": "fart", "start": ms, "confidence": 0.8, "verified": true|false|null},
-///               {"id": "...", "type": "af", "start": ms, "end": ms}]   // nieregularny rytm z opaski (odstępy RR)
+///              ]   // nieregularny rytm z opaski jest w osobnym pliku „rytm-snu-rytm” (buildRhythmExchange)
 /// }
 /// Czasy w milisekundach od epoki (UTC). Plik zawiera całą historię – import w Kresce
 /// zastępuje poprzednie dane z tego źródła, więc można eksportować wielokrotnie.
@@ -33,8 +33,6 @@ Future<(List<int>, int, int)> buildFartExchange() async {
   final farts = (await db.allEvents(SoundType.fart)).where((e) => finished.contains(e.nightId)).toList()
     ..sort((a, b) => a.ts.compareTo(b.ts));
 
-  // nieregularny rytm (podejrzenie AF) z odstępów RR własnej opaski – noce z Polar EKG go nie mają
-  final af = (await db.extOfKind('h10af')).where((e) => finished.contains(e.$1) && (e.$4 ?? 0) > 0).toList();
 
   final now = DateTime.now();
   final bytes = utf8.encode(jsonEncode({
@@ -55,6 +53,31 @@ Future<(List<int>, int, int)> buildFartExchange() async {
           'confidence': double.parse(e.confidence.toStringAsFixed(3)),
           'verified': e.verified,
         },
+    ],
+  }));
+  return (bytes, nights.length, farts.where((e) => e.counts).length);
+}
+
+/// Rytm serca z opaski dla Doby — osobny plik „rytm-snu-rytm”, niezależny od liczenia wiatrów.
+/// windows = czas z tętnem z opaski (monitorowanie), events = nieregularny rytm (podejrzenie AF).
+/// Noce uzupełnione z Polar EKG pomijamy — ich AF Doba bierze wprost z Polar EKG.
+Future<(List<int>, int)> buildRhythmExchange() async {
+  final db = Db.instance;
+  final nights = await db.nights();
+  final finished = {for (final n in nights) if (n.end != null) n.id};
+  final fromPolar = {for (final e in await db.extOfKind('h10pe')) e.$1};
+  final spans = (await db.hrSpans()).where((s) => finished.contains(s.$1) && !fromPolar.contains(s.$1)).toList();
+  final watched = {for (final s in spans) s.$1};
+  final af = (await db.extOfKind('h10af')).where((e) => watched.contains(e.$1) && (e.$4 ?? 0) > 0).toList();
+  final bytes = utf8.encode(jsonEncode({
+    'format': 'wymiana-zdarzen',
+    'version': 1,
+    'source': 'rytm-snu-rytm',
+    'exported_at': DateTime.now().millisecondsSinceEpoch,
+    'windows': [
+      for (final (_, a, b) in spans) {'start': a.millisecondsSinceEpoch - 60000, 'end': b.millisecondsSinceEpoch},
+    ],
+    'events': [
       for (final (i, (night, t, _, dur)) in af.indexed)
         {
           'id': 'n$night-af$i',
@@ -64,7 +87,7 @@ Future<(List<int>, int, int)> buildFartExchange() async {
         },
     ],
   }));
-  return (bytes, nights.length, farts.where((e) => e.counts).length);
+  return (bytes, af.length);
 }
 
 Future<ExchangeExport> exportFartExchange() async {

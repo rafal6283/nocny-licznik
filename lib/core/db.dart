@@ -236,6 +236,16 @@ class Db {
     });
   }
 
+  /// Noce z tętnem z opaski: (noc, pierwsza i ostatnia minuta z tętnem) — czas, gdy rytm był monitorowany.
+  Future<List<(int, DateTime, DateTime)>> hrSpans() async {
+    final r = await (await db).rawQuery(
+        'SELECT night_id, MIN(ts) AS a, MAX(ts) AS b FROM minutes WHERE hr IS NOT NULL GROUP BY night_id');
+    return [
+      for (final m in r)
+        (m['night_id'] as int, DateTime.fromMillisecondsSinceEpoch(m['a'] as int), DateTime.fromMillisecondsSinceEpoch(m['b'] as int))
+    ];
+  }
+
   /// Wszystkie wpisy danego rodzaju ze wszystkich nocy: (noc, czas, wartość, czas trwania w min).
   Future<List<(int, DateTime, double?, double?)>> extOfKind(String kind) async {
     final r = await (await db).query('ext', where: 'kind = ?', whereArgs: [kind], orderBy: 'ts ASC');
