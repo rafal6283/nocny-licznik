@@ -23,6 +23,7 @@ import '../core/settings.dart';
 import '../core/body_position.dart';
 import '../core/home_assistant.dart';
 import '../core/room_sensor.dart';
+import '../core/tuya_cloud.dart';
 import '../core/strap.dart';
 import 'classifier.dart';
 import 'accel_breath.dart';
@@ -1070,6 +1071,8 @@ class NightEngine extends ChangeNotifier {
     n.end = DateTime.now();
     n.micBlockedMin = _blockedHops ~/ 120;
     await summarize(n, minutes, liveEvents);
+    // czujnik Smart Life: pełna historia raportów z chmury Tuya do minut nocy
+    unawaited(TuyaCloud.applyToNight(n).catchError((_) {}));
     // po przeliczeniu danych z opaski – tętno, HRV i oddech do Health Connect
     unawaited(Strap.applyToNight(n).catchError((_) => null).then((_) => HealthSync.pushVitals(n)).catchError((_) {}));
     unawaited(WeatherService.fetchFor(n).then((ok) {

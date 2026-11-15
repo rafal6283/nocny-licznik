@@ -30,7 +30,7 @@ Rejestracja i analiza snu na Android i iOS w stylu Sleep Cycle / Sleep as Androi
 - **Co wpływa na Twój sen** — osobiste efekty czynników (pora snu, kawa, alkohol, kolacja, trening, temperatura i wilgotność w sypialni, pogoda, hałas, światło, nieszczelność maski, tagi) i karta „Co wpłynęło na tę noc”
 - **Eksperymenty A/B** — noce losowane na zmianę albo przed/po zmianie, wynik z testem statystycznym
 - **Treningi i posiłki z Health Connect** — np. Forma, Dziennik talerza, Huawei przez Health Sync
-- **Termometr w sypialni** — Xiaomi LYWSD03MMC/MHO-C401 (oryginał, ATC, pvvx, BTHome) przez Bluetooth
+- **Termometr w sypialni** — Xiaomi LYWSD03MMC/MHO-C401 (oryginał, ATC, pvvx, BTHome) przez Bluetooth albo czujnik ze Smart Life przez chmurę Tuya (bieżący odczyt + pełna historia raportów po nocy)
 - **Światła przez Home Assistant** — ściemnianie przy „Dobranoc”, świt przed budzikiem
 - **Mówienie przez sen jako tekst** — rozpoznawanie mowy z nagrań (Android 13+, iOS)
 - **Drzemka** — budzik liczony od zaśnięcia (10–90 min), drzemki poza statystykami nocy

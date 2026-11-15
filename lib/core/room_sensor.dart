@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 
 import 'settings.dart';
+import 'tuya_cloud.dart';
 
 /// Odczyt z termometru Bluetooth (temperatura, wilgotność).
 class RoomReading {
@@ -28,13 +29,19 @@ class RoomSensor {
   StreamSubscription<List<ScanResult>>? _scanSub;
   bool _running = false;
 
-  bool get configured => Settings.instance.roomSensorOn && Settings.instance.roomSensorId.isNotEmpty;
+  bool get configured {
+    final s = Settings.instance;
+    if (!s.roomSensorOn) return false;
+    return s.roomSource == 'tuya' ? s.tuyaDevice.isNotEmpty : s.roomSensorId.isNotEmpty;
+  }
 
   /// Aktualny odczyt (gdy nie starszy niż 12 min).
-  (double, double)? current() {
+  (double?, double?)? current() {
     final r = last.value;
-    if (r == null || DateTime.now().difference(r.at).inMinutes > 12) return null;
-    return (r.temp, r.hum);
+    // czujniki Tuya na baterie raportują rzadko — ich odczyt ważny dłużej
+    final maxAge = Settings.instance.roomSource == 'tuya' ? 90 : 12;
+    if (r == null || DateTime.now().difference(r.at).inMinutes > maxAge) return null;
+    return (r.temp.isNaN ? null : r.temp, r.hum.isNaN ? null : r.hum);
   }
 
   // ---------------------------------------------------------------- dekodowanie
@@ -138,7 +145,8 @@ class RoomSensor {
   Future<void> _poll() async {
     if (!_running) return;
     try {
-      final r = await readOnce(Settings.instance.roomSensorId);
+      final s = Settings.instance;
+      final r = s.roomSource == 'tuya' ? await TuyaCloud.read(s.tuyaDevice) : await readOnce(s.roomSensorId);
       if (r != null) last.value = r;
     } catch (_) {}
   }

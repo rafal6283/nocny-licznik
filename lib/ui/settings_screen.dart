@@ -24,6 +24,7 @@ import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import '../core/home_assistant.dart';
 import '../core/lifestyle.dart';
 import '../core/room_sensor.dart';
+import '../core/tuya_cloud.dart';
 import '../cpap/cpap_data.dart';
 import '../cpap/cpap_import.dart';
 import 'accuracy_screen.dart';
@@ -237,6 +238,108 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final r = await RoomSensor.instance.readOnce(picked.$1);
     if (r != null) RoomSensor.instance.last.value = r;
     _snack(r == null ? 'Nie udało się odczytać — termometr zbyt daleko?' : 'Odczyt: ${r.temp.toStringAsFixed(1)} °C, ${r.hum.round()}%');
+  }
+
+  Future<void> _tuyaSetup() async {
+    final id = TextEditingController(text: await TuyaCloud.accessId());
+    final sec = TextEditingController(text: await TuyaCloud.secret());
+    var host = s.tuyaHost;
+    if (!mounted) return;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, set) => AlertDialog(
+          title: const Text('Smart Life przez chmurę Tuya'),
+          content: SingleChildScrollView(
+            child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              const Text(
+                'Jednorazowo na platform.tuya.com (komputer):\n'
+                '1. Załóż darmowe konto deweloperskie.\n'
+                '2. Cloud → Development → Create Cloud Project: Smart Home, centrum danych „Central Europe”.\n'
+                '3. W projekcie: Devices → Link App Account → Add App Account i zeskanuj kod aplikacją Smart Life '
+                '(Ja → ikona skanera u góry).\n'
+                '4. Z zakładki Overview przepisz Access ID i Access Secret poniżej.',
+                style: TextStyle(fontSize: 12, height: 1.4),
+              ),
+              const SizedBox(height: 8),
+              DropdownButton<String>(
+                isExpanded: true,
+                value: TuyaCloud.regions.any((r) => r.$1 == host) ? host : TuyaCloud.regions.first.$1,
+                items: [
+                  for (final (u, n) in TuyaCloud.regions) DropdownMenuItem(value: u, child: Text('Centrum danych: $n')),
+                ],
+                onChanged: (v) => set(() => host = v ?? host),
+              ),
+              TextField(controller: id, decoration: const InputDecoration(labelText: 'Access ID / Client ID')),
+              TextField(
+                controller: sec,
+                obscureText: true,
+                decoration: const InputDecoration(labelText: 'Access Secret / Client Secret'),
+              ),
+            ]),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Anuluj')),
+            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Połącz')),
+          ],
+        ),
+      ),
+    );
+    if (ok != true) return;
+    s.tuyaHost = host;
+    await TuyaCloud.setCredentials(id.text, sec.text);
+    List<TuyaDevice> devs;
+    try {
+      _snack('Łączę z chmurą Tuya…');
+      devs = await TuyaCloud.devices();
+    } catch (e) {
+      _snack('$e');
+      return;
+    }
+    if (devs.isEmpty) {
+      _snack('Brak urządzeń — połącz konto Smart Life z projektem (Devices → Link App Account).');
+      return;
+    }
+    // czujniki temperatury na początku listy
+    const sensorCats = {'wsdcg', 'wsd', 'ldcg', 'co2bj', 'hjjcy', 'zwjcy'};
+    devs.sort((a, b) => (sensorCats.contains(b.category) ? 1 : 0) - (sensorCats.contains(a.category) ? 1 : 0));
+    if (!mounted) return;
+    final pick = await showDialog<TuyaDevice>(
+      context: context,
+      builder: (ctx) => SimpleDialog(
+        title: const Text('Wybierz czujnik'),
+        children: [
+          for (final d in devs)
+            SimpleDialogOption(
+              onPressed: () => Navigator.pop(ctx, d),
+              child: ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: Icon(sensorCats.contains(d.category) ? Icons.thermostat : Icons.devices_other),
+                title: Text(d.name),
+                subtitle: Text('${d.product.isEmpty ? d.category : d.product}${d.online ? '' : ' · offline'}'),
+              ),
+            ),
+        ],
+      ),
+    );
+    if (pick == null) return;
+    setState(() {
+      s.tuyaDevice = pick.id;
+      s.tuyaDeviceName = pick.name;
+      s.roomSource = 'tuya';
+      s.roomSensorOn = true;
+    });
+    try {
+      final r = await TuyaCloud.read(pick.id);
+      if (r == null) {
+        _snack('To urządzenie nie podaje temperatury ani wilgotności — wybierz czujnik.');
+      } else {
+        RoomSensor.instance.last.value = r;
+        _snack('Odczyt: ${r.temp.isNaN ? '—' : '${r.temp.toStringAsFixed(1)} °C'}, ${r.hum.isNaN ? '—' : '${r.hum.round()}%'}');
+      }
+    } catch (e) {
+      _snack('$e');
+    }
   }
 
   Future<void> _haSetup() async {
@@ -661,28 +764,42 @@ class _SettingsScreenState extends State<SettingsScreen> {
         Card(
           child: Column(children: [
             SwitchListTile(
-              title: const Text('Termometr w sypialni (Bluetooth)'),
-              subtitle: Text(s.roomSensorId.isEmpty
-                  ? 'Xiaomi LYWSD03MMC / MHO-C401 (oryginał lub ATC/pvvx/BTHome) — temperatura i wilgotność co 5 min'
-                  : 'Wybrany: ${s.roomSensorName.isEmpty ? s.roomSensorId : s.roomSensorName}'),
+              title: const Text('Termometr w sypialni'),
+              subtitle: Text(!s.roomSensorOn
+                  ? 'Temperatura i wilgotność w nocy: Xiaomi przez Bluetooth albo czujnik ze Smart Life (Tuya)'
+                  : s.roomSource == 'tuya'
+                      ? (s.tuyaDevice.isEmpty ? 'Smart Life (Tuya) — nie wybrano czujnika' : 'Smart Life: ${s.tuyaDeviceName}')
+                      : (s.roomSensorId.isEmpty
+                          ? 'Bluetooth — nie wybrano termometru'
+                          : 'Bluetooth: ${s.roomSensorName.isEmpty ? s.roomSensorId : s.roomSensorName}')),
               value: s.roomSensorOn,
-              onChanged: (v) async {
-                setState(() => s.roomSensorOn = v);
-                if (v && s.roomSensorId.isEmpty) await _pickThermometer();
-              },
+              onChanged: (v) => setState(() => s.roomSensorOn = v),
             ),
-            if (s.roomSensorOn)
+            if (s.roomSensorOn) ...[
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                child: SegmentedButton<String>(
+                  segments: const [
+                    ButtonSegment(value: 'ble', label: Text('Xiaomi (Bluetooth)')),
+                    ButtonSegment(value: 'tuya', label: Text('Smart Life (Tuya)')),
+                  ],
+                  selected: {s.roomSource},
+                  onSelectionChanged: (v) => setState(() => s.roomSource = v.first),
+                ),
+              ),
               ListTile(
                 leading: const Icon(Icons.thermostat),
-                title: const Text('Wybierz / sprawdź termometr'),
+                title: Text(s.roomSource == 'tuya' ? 'Połącz z Tuya i wybierz czujnik' : 'Wybierz / sprawdź termometr'),
                 subtitle: ValueListenableBuilder(
                   valueListenable: RoomSensor.instance.last,
                   builder: (_, r, __) => Text(r == null
-                      ? 'Dotknij, aby wyszukać'
-                      : 'Ostatni odczyt: ${r.temp.toStringAsFixed(1)} °C, ${r.hum.round()}% (${hhmm(r.at)})'),
+                      ? 'Dotknij, aby skonfigurować'
+                      : 'Ostatni odczyt: ${r.temp.isNaN ? '—' : '${r.temp.toStringAsFixed(1)} °C'}, '
+                          '${r.hum.isNaN ? '—' : '${r.hum.round()}%'} (${hhmm(r.at)})'),
                 ),
-                onTap: _pickThermometer,
+                onTap: s.roomSource == 'tuya' ? _tuyaSetup : _pickThermometer,
               ),
+            ],
             const Divider(height: 1),
             SwitchListTile(
               title: const Text('Światła przez Home Assistant'),
@@ -975,7 +1092,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
         ),
         const SizedBox(height: 16),
-        const Center(child: Text('Rytm Snu 2.25', style: TextStyle(color: C.muted, fontSize: 12))),
+        const Center(child: Text('Rytm Snu 2.26', style: TextStyle(color: C.muted, fontSize: 12))),
       ],
     );
   }

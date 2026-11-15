@@ -189,6 +189,16 @@ class Settings extends ChangeNotifier {
   String get roomSensorId => _s('roomId', '');
   set roomSensorId(String v) => _set('roomId', v);
   String get roomSensorName => _s('roomName', '');
+  /// Źródło termometru: 'ble' (Xiaomi przez Bluetooth) albo 'tuya' (Smart Life przez chmurę Tuya).
+  String get roomSource => _s('roomSource', 'ble');
+  set roomSource(String v) => _set('roomSource', v);
+  /// Centrum danych Tuya (adres API), np. https://openapi.tuyaeu.com
+  String get tuyaHost => _s('tuyaHost', 'https://openapi.tuyaeu.com');
+  set tuyaHost(String v) => _set('tuyaHost', v);
+  String get tuyaDevice => _s('tuyaDevice', '');
+  set tuyaDevice(String v) => _set('tuyaDevice', v);
+  String get tuyaDeviceName => _s('tuyaDeviceName', '');
+  set tuyaDeviceName(String v) => _set('tuyaDeviceName', v);
   set roomSensorName(String v) => _set('roomName', v);
 
   // --- Maska CPAP na żywo ---

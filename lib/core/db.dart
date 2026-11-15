@@ -266,6 +266,16 @@ class Db {
     await b.commit(noResult: true);
   }
 
+  /// Klimat w sypialni dla minut: idx → (temperatura, wilgotność).
+  Future<void> setMinuteRoom(int nightId, Map<int, (double?, double?)> byIdx) async {
+    final b = (await db).batch();
+    for (final e in byIdx.entries) {
+      b.update('minutes', {'room_temp': e.value.$1, 'room_hum': e.value.$2},
+          where: 'night_id = ? AND idx = ?', whereArgs: [nightId, e.key]);
+    }
+    await b.commit(noResult: true);
+  }
+
   /// Dane opaski dla minut: idx → (tętno, HRV, ruch tułowia).
   Future<void> setMinuteStrap(int nightId, Map<int, (double?, double?, int?)> byIdx) async {
     final b = (await db).batch();
