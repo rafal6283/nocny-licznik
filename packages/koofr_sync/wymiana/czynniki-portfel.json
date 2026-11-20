@@ -1,0 +1,12 @@
+{
+ "format": "czynniki-dnia",
+ "version": 1,
+ "source": "portfel",
+ "exported_at": 1763600000000,
+ "days": [
+  {
+   "date": "2025-11-19",
+   "value": 125000
+  }
+ ]
+}

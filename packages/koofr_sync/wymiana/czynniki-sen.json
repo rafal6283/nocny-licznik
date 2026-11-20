@@ -1,0 +1,18 @@
+{
+ "format": "czynniki-dnia",
+ "version": 1,
+ "source": "rytm-snu",
+ "exported_at": 1763600000000,
+ "days": [
+  {
+   "date": "2025-11-19",
+   "sleep_min": 412,
+   "score": 78,
+   "awakenings": 3,
+   "apnea_idx": 4.2,
+   "snore_min": 12,
+   "hr_avg": 58.1,
+   "bed_h": 23.5
+  }
+ ]
+}

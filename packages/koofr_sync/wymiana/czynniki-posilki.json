@@ -1,0 +1,17 @@
+{
+ "format": "czynniki-dnia",
+ "version": 1,
+ "source": "dziennik-talerza",
+ "exported_at": 1763600000000,
+ "days": [
+  {
+   "date": "2025-11-19",
+   "meals": 4,
+   "kcal": 2150,
+   "big_meal_kcal": 820,
+   "last_meal_h": 20.5,
+   "alcohol": 1,
+   "coffee": 2
+  }
+ ]
+}

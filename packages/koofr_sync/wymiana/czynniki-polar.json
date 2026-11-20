@@ -1,0 +1,14 @@
+{
+ "format": "czynniki-dnia",
+ "version": 1,
+ "source": "polar-ekg",
+ "exported_at": 1763600000000,
+ "days": [
+  {
+   "date": "2025-11-19",
+   "hrv": 38.4,
+   "af_min": 0.8,
+   "af_n": 1
+  }
+ ]
+}

@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:koofr_backup_ui/koofr_backup_ui.dart' show ExchangeStatusScreen;
 import 'package:koofr_sync/koofr_sync.dart';
 import 'package:share_plus/share_plus.dart';
 
@@ -1006,6 +1007,15 @@ class _ExchangeCardState extends State<_ExchangeCard> {
               subtitle: Text(last == null ? 'Automatycznie po każdej nocy i przy otwarciu aplikacji' : 'Ostatnio: $last'),
               onTap: busy ? null : _run,
             ),
+          ),
+        if (v)
+          ListTile(
+            leading: const Icon(Icons.fact_check_outlined),
+            title: const Text('Stan wymiany'),
+            subtitle: const Text('Co i kiedy zostało wysłane i wczytane, błędy'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
+                builder: (_) => ExchangeStatusScreen(sync: Cloud.sync, sources: const ['polar-ekg', 'polar-noce']))),
           ),
       ]),
     );

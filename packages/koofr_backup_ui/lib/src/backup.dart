@@ -141,9 +141,11 @@ class KoofrBackup {
               (n) => on.entries.any((s) => s.value && (n == s.key || n.startsWith('${s.key}-'))), ex.import,
               force: force);
       _lastExchangeRun = DateTime.now();
+      final failed = pull ? sync.lastPullErrors.keys.toList() : const <String>[];
       final msg = [
         if (sent.isNotEmpty) 'wysłano: ${sent.join(', ')}',
         if (got.isNotEmpty) 'pobrano: ${got.join(', ')}',
+        if (failed.isNotEmpty) 'błąd wczytania: ${failed.join(', ')} (szczegóły w „Stan wymiany”)',
       ].join(' · ');
       lastExchange.value = msg.isEmpty ? 'bez zmian' : msg;
       return lastExchange.value!;

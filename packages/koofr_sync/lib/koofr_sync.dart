@@ -15,3 +15,5 @@ export 'src/crypto.dart' show KsCrypto, KsCryptoException;
 export 'src/recovery_code.dart';
 export 'src/sync.dart';
 export 'src/webdav.dart' show KoofrException, DavEntry, WebDav;
+export 'src/wymiana.dart';
+export 'src/wymiana_przyklady.g.dart';

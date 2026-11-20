@@ -466,7 +466,16 @@ class PolarAf {
     try {
       final f = await _file();
       if (!await f.exists()) return const [];
-      final j = jsonDecode(await f.readAsString());
+      return parse(await f.readAsString());
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  /// Epizody AF z pliku „polar-ekg” (wymiana-zdarzen v1); zły plik = pusta lista.
+  static List<(DateTime, DateTime)> parse(String text) {
+    try {
+      final j = jsonDecode(text);
       if (j is! Map || j['format'] != 'wymiana-zdarzen') return const [];
       return [
         for (final e in (j['events'] as List? ?? const []))

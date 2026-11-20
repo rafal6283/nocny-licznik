@@ -1,0 +1,35 @@
+{
+ "format": "wymiana-zdarzen",
+ "version": 1,
+ "source": "kreska",
+ "exported_at": 1763600000000,
+ "counter": "FF",
+ "windows": [
+  {
+   "start": 1763427200000,
+   "end": 1763600000000
+  }
+ ],
+ "events": [
+  {
+   "id": "c1-1",
+   "type": "tap",
+   "start": 1763456000000
+  },
+  {
+   "id": "c1-2",
+   "type": "tap",
+   "start": 1763528000000
+  }
+ ],
+ "day_totals": [
+  {
+   "date": "2025-11-18",
+   "total": 1
+  },
+  {
+   "date": "2025-11-19",
+   "total": 1
+  }
+ ]
+}

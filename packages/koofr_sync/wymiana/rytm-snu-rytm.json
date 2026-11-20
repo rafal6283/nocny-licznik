@@ -1,0 +1,20 @@
+{
+ "format": "wymiana-zdarzen",
+ "version": 1,
+ "source": "rytm-snu-rytm",
+ "exported_at": 1763600000000,
+ "windows": [
+  {
+   "start": 1763567540000,
+   "end": 1763592800000
+  }
+ ],
+ "events": [
+  {
+   "id": "n12-af0",
+   "type": "af",
+   "start": 1763574800000,
+   "end": 1763575040000
+  }
+ ]
+}

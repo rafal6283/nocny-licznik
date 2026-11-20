@@ -1,0 +1,28 @@
+{
+ "format": "wymiana-zdarzen",
+ "version": 1,
+ "source": "rytm-snu",
+ "exported_at": 1763600000000,
+ "windows": [
+  {
+   "start": 1763567600000,
+   "end": 1763592800000
+  }
+ ],
+ "events": [
+  {
+   "id": "n12-e1",
+   "type": "fart",
+   "start": 1763571200000,
+   "confidence": 0.82,
+   "verified": true
+  },
+  {
+   "id": "n12-e2",
+   "type": "fart",
+   "start": 1763582000000,
+   "confidence": 0.55,
+   "verified": null
+  }
+ ]
+}

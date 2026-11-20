@@ -1,0 +1,15 @@
+{
+ "format": "czynniki-dnia",
+ "version": 1,
+ "source": "forma",
+ "exported_at": 1763600000000,
+ "days": [
+  {
+   "date": "2025-11-19",
+   "train_min": 32,
+   "train_kcal": 260,
+   "rpe_max": 7,
+   "end_h": 18.25
+  }
+ ]
+}

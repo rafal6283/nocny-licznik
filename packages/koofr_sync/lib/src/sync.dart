@@ -9,6 +9,7 @@ import 'config.dart';
 import 'crypto.dart';
 import 'recovery_code.dart';
 import 'webdav.dart';
+import 'wymiana.dart';
 
 /// Członek rodziny zapisany w `<root>/_czlonkowie/<id>.json` (wspólne dla wszystkich aplikacji).
 class Member {
@@ -109,6 +110,35 @@ class ShareLink {
 /// <root>/<aplikacja>/zgody/<właściciel>__<oglądający>/{wlasciciel,ogladajacy}.json
 /// <root>/<aplikacja>/dane/<właściciel>__<oglądający>.ksy   dane do podglądu
 /// ```
+/// Stan jednego pliku wymiany na tym telefonie (dziennik do ekranu „Stan wymiany”).
+class ExchangeLogEntry {
+  final String name;
+  DateTime? sent; // ostatnia wysyłka z tego telefonu
+  DateTime? received; // ostatnie wczytanie na tym telefonie
+  DateTime? errorAt;
+  String? error; // ostatni błąd wczytania (znika po udanym wczytaniu)
+  List<String> problems; // niezgodności z kontraktem (WYMIANA.md) — ostrzeżenia, nie blokują
+
+  ExchangeLogEntry(this.name, {this.sent, this.received, this.errorAt, this.error, this.problems = const []});
+
+  static DateTime? _t(Object? v) => v is int ? DateTime.fromMillisecondsSinceEpoch(v) : null;
+
+  factory ExchangeLogEntry.fromJson(String name, Map j) => ExchangeLogEntry(name,
+      sent: _t(j['s']),
+      received: _t(j['r']),
+      errorAt: _t(j['ea']),
+      error: j['e'] as String?,
+      problems: [for (final p in (j['p'] as List? ?? const [])) '$p']);
+
+  Map<String, Object?> toJson() => {
+        if (sent != null) 's': sent!.millisecondsSinceEpoch,
+        if (received != null) 'r': received!.millisecondsSinceEpoch,
+        if (errorAt != null) 'ea': errorAt!.millisecondsSinceEpoch,
+        if (error != null) 'e': error,
+        if (problems.isNotEmpty) 'p': problems,
+      };
+}
+
 class KoofrSync {
   /// Krótki identyfikator aplikacji, np. „rytm-snu”, „doba”.
   final String appId;
@@ -460,6 +490,9 @@ class KoofrSync {
     if (!force && await store.read(key) == digest) return false;
     await dav.putAtomic('$_myExchange/$name.ksy', await crypto!.sealExchange(data));
     await store.write(key, digest);
+    await _logUpdate(name, (e) => e
+      ..sent = DateTime.now()
+      ..problems = sprawdzWymiane(name, data));
     return true;
   }
 
@@ -468,6 +501,8 @@ class KoofrSync {
     _requireReady();
     await dav.delete('$_myExchange/$name.ksy');
     await store.delete('${_k}ex.pub.$userId.$name');
+    final log = await exchangeLog();
+    if (log.remove(name) != null) await _logSave(log);
   }
 
   /// Dostępne pliki wymiany tej osoby: nazwa → (czas zmiany, rozmiar).
@@ -484,6 +519,7 @@ class KoofrSync {
   Future<List<String>> pullExchange(bool Function(String name) want,
       Future<void> Function(String name, Uint8List data) handle, {bool force = false}) async {
     _requireReady();
+    lastPullErrors.clear();
     final done = <String>[];
     for (final e in (await exchangeFiles()).entries) {
       if (!want(e.key)) continue;
@@ -492,11 +528,53 @@ class KoofrSync {
       if (!force && await store.read(key) == stamp) continue;
       final file = await dav.get('$_myExchange/${e.key}.ksy');
       if (file == null) continue;
-      await handle(e.key, await crypto!.openExchange(file));
-      await store.write(key, stamp);
-      done.add(e.key);
+      // Zły plik jednej aplikacji nie może blokować pozostałych: błąd trafia do dziennika,
+      // plik nie jest oznaczany jako wczytany (spróbujemy przy następnej zmianie lub „Wymień teraz”).
+      try {
+        final data = await crypto!.openExchange(file);
+        await handle(e.key, data);
+        await store.write(key, stamp);
+        await _logUpdate(e.key, (l) => l
+          ..received = DateTime.now()
+          ..error = null
+          ..errorAt = null
+          ..problems = sprawdzWymiane(e.key, data));
+        done.add(e.key);
+      } catch (err) {
+        lastPullErrors[e.key] = '$err';
+        await _logUpdate(e.key, (l) => l
+          ..error = '$err'
+          ..errorAt = DateTime.now());
+      }
     }
     return done;
+  }
+
+  /// Błędy wczytania z ostatniego [pullExchange] (nazwa → opis).
+  final Map<String, String> lastPullErrors = {};
+
+  String get _logKey => '${_k}ex.log.$userId';
+
+  /// Dziennik wymiany na tym telefonie: nazwa pliku → stan.
+  Future<Map<String, ExchangeLogEntry>> exchangeLog() async {
+    final raw = userId == null ? null : await store.read(_logKey);
+    if (raw == null) return {};
+    try {
+      final j = jsonDecode(raw) as Map;
+      return {for (final e in j.entries) '${e.key}': ExchangeLogEntry.fromJson('${e.key}', e.value as Map)};
+    } catch (_) {
+      return {};
+    }
+  }
+
+  Future<void> _logSave(Map<String, ExchangeLogEntry> log) =>
+      store.write(_logKey, jsonEncode({for (final e in log.entries) e.key: e.value.toJson()}));
+
+  Future<void> _logUpdate(String name, void Function(ExchangeLogEntry) f) async {
+    if (userId == null) return;
+    final log = await exchangeLog();
+    f(log[name] ??= ExchangeLogEntry(name));
+    await _logSave(log);
   }
 
   // ---------------------------------------------------------------- podgląd za zgodą

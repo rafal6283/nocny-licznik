@@ -29,6 +29,13 @@ dependencies:
     path: packages/bakometr_native
   koofr_sync:
     path: packages/koofr_sync
+  koofr_backup_ui:
+    path: packages/koofr_backup_ui
+
+# koofr_backup_ui pobiera koofr_sync z GitHuba — tutaj zawsze lokalna wersja z tego repozytorium
+dependency_overrides:
+  koofr_sync:
+    path: packages/koofr_sync
 
 dev_dependencies:
   flutter_test:

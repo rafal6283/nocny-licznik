@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:koofr_sync/koofr_sync.dart';
 
 import 'backup.dart';
+import 'status_screen.dart';
 
 /// Pozycja do ustawień aplikacji, otwierająca [KoofrBackupScreen].
 class KoofrBackupTile extends StatelessWidget {
@@ -724,6 +725,14 @@ class _ExchangeCardState extends State<_ExchangeCard> {
               subtitle: Text(last == null ? 'Automatycznie przy otwarciu aplikacji' : 'Ostatnio: $last'),
               onTap: busy ? null : _run,
             ),
+          ),
+          ListTile(
+            leading: const Icon(Icons.fact_check_outlined),
+            title: const Text('Stan wymiany'),
+            subtitle: const Text('Co i kiedy zostało wysłane i wczytane, błędy'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
+                builder: (_) => ExchangeStatusScreen(sync: kb.sync, sources: [for (final s in ex.sources) s.$1]))),
           ),
         ],
       ]),

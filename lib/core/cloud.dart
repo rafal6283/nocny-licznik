@@ -184,6 +184,9 @@ class Cloud {
         msg = '$msg · pobrano z Polar EKG';
         dataChanged();
       }
+      if (sync.lastPullErrors.isNotEmpty) {
+        msg = '$msg · błąd wczytania: ${sync.lastPullErrors.keys.join(', ')} (szczegóły w „Stan wymiany”)';
+      }
       final filled = await PolarNights.applyAll();
       if (filled > 0) msg = '$msg · noce uzupełnione danymi z opaski: $filled';
     } catch (_) {}

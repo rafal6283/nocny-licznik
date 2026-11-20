@@ -1,0 +1,15 @@
+{
+ "format": "czynniki-dnia",
+ "version": 1,
+ "source": "doba",
+ "exported_at": 1763600000000,
+ "days": [
+  {
+   "date": "2025-11-19",
+   "steps": 8450,
+   "walk_min": 64,
+   "work_min": 480,
+   "travel_min": 55
+  }
+ ]
+}

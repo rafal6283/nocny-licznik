@@ -153,4 +153,43 @@ void main() {
     await snu.removeExchange('rytm-snu');
     expect(await kreska.exchangeFiles(), isEmpty);
   });
+
+  test('zły plik jednej aplikacji nie blokuje pozostałych; dziennik wymiany', () async {
+    final code = await RecoveryCode.generate();
+    final polar = phone('polar-ekg');
+    await polar.load();
+    await polar.connect(cfg);
+    await polar.join(newName: 'Rafał', code: code);
+    final kreska = phone('kreska');
+    await kreska.load();
+    await kreska.connect(cfg);
+    await kreska.join(existingId: 'rafal', code: (await RecoveryCode.parse(await code.format()))!);
+
+    await polar.publishExchange('polar-ekg', utf8.encode(wymianaPrzyklady['polar-ekg']!));
+    await polar.publishExchange('rytm-snu-rytm', utf8.encode('{"format":"zly"}'));
+    final sentLog = await polar.exchangeLog();
+    expect(sentLog['polar-ekg']!.sent, isNotNull);
+    expect(sentLog['polar-ekg']!.problems, isEmpty);
+    expect(sentLog['rytm-snu-rytm']!.problems, isNotEmpty); // niezgodny z kontraktem
+
+    final got = <String>[];
+    Future<void> h(String n, List<int> d) async {
+      if (n == 'rytm-snu-rytm') throw const FormatException('nieznany format');
+      got.add(n);
+    }
+
+    final done = await kreska.pullExchange((_) => true, h);
+    expect(done, ['polar-ekg']);
+    expect(got, ['polar-ekg']);
+    expect(kreska.lastPullErrors.keys, ['rytm-snu-rytm']);
+    var log = await kreska.exchangeLog();
+    expect(log['polar-ekg']!.received, isNotNull);
+    expect(log['rytm-snu-rytm']!.error, contains('nieznany format'));
+    // błędny plik nie jest oznaczony jako wczytany — po naprawie odbiorcy wczyta się
+    expect(await kreska.pullExchange((_) => true, (n, d) async => got.add(n)), ['rytm-snu-rytm']);
+    log = await kreska.exchangeLog();
+    expect(log['rytm-snu-rytm']!.error, isNull);
+    expect(log['rytm-snu-rytm']!.received, isNotNull);
+    expect(kreska.lastPullErrors, isEmpty);
+  });
 }

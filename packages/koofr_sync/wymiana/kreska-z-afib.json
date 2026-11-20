@@ -1,0 +1,28 @@
+{
+ "format": "wymiana-zdarzen",
+ "version": 1,
+ "source": "kreska",
+ "exported_at": 1763600000000,
+ "counter": "AFIB",
+ "kind": "tracker",
+ "windows": [
+  {
+   "start": 1763427200000,
+   "end": 1763600000000
+  }
+ ],
+ "events": [
+  {
+   "id": "t3-0",
+   "type": "session",
+   "start": 1763492000000,
+   "end": 1763495600000
+  }
+ ],
+ "day_totals": [
+  {
+   "date": "2025-11-19",
+   "total": 1
+  }
+ ]
+}

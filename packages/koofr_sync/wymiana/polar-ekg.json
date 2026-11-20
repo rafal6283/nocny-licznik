@@ -1,0 +1,20 @@
+{
+ "format": "wymiana-zdarzen",
+ "version": 1,
+ "source": "polar-ekg",
+ "exported_at": 1763600000000,
+ "windows": [
+  {
+   "start": 1763492000000,
+   "end": 1763520800000
+  }
+ ],
+ "events": [
+  {
+   "id": "20251119_2250-af0",
+   "type": "af",
+   "start": 1763495600000,
+   "end": 1763495646000
+  }
+ ]
+}
