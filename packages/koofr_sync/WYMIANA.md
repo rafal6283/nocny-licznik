@@ -18,7 +18,7 @@ a przykłady każdego pliku w `wymiana/*.json` (też jako stałe `wymianaPrzykla
 | `czynniki-posilki` | czynniki-dnia v1, source `dziennik-talerza` | Dziennik talerza | Polar EKG, Forma, Doba, Rytm Snu | `meals, kcal, big_meal_kcal, last_meal_h, eve_kcal, alcohol, alcohol_last_h, coffee, coffee_last_h` (pory jako godzina z ułamkiem) |
 | `czynniki-leki` | czynniki-dnia v1, source `teczka` | Teczka | Polar EKG, Doba | `doses, taken, missed` (bez nazw leków) |
 | `czynniki-portfel` | czynniki-dnia v1, source `portfel` | Portfel | Doba | `value` |
-| `czynniki-forma` | czynniki-dnia v1, source `forma` | Forma | Doba, Rytm Snu | `train_min, train_kcal, rpe_max, end_h, other_min` |
+| `czynniki-forma` | czynniki-dnia v1, source `forma` | Forma | Doba, Rytm Snu, Polar EKG | `train_min, train_kcal, rpe_max, end_h, other_min` |
 | `czynniki-ruch` | czynniki-dnia v1, source `doba` | Doba | Polar EKG | `steps, sport_min, walk_min, work_min, travel_min` |
 | `kreska-<licznik>` | wymiana-zdarzen v1, source `kreska`, `counter` | Kreska | Dziennik talerza, Doba | kliknięcia `tap`, `day_totals` |
 | `kreska-z-<zdarzenie>` | wymiana-zdarzen v1, source `kreska`, `kind: tracker` | Kreska | Polar EKG, Doba | odcinki `session` bez pauz, `day_totals` |

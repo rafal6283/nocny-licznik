@@ -75,7 +75,7 @@ final List<PlikWymiany> kontraktWymiany = [
   PlikWymiany._('czynniki-portfel', RegExp(r'^czynniki-portfel$'), 'czynniki-dnia', 1, const ['portfel'], 'portfel',
       const ['doba'], const {}, 'Wartość majątku dzień po dniu.', 'czynniki-portfel'),
   PlikWymiany._('czynniki-forma', RegExp(r'^czynniki-forma$'), 'czynniki-dnia', 1, const ['forma'], 'forma',
-      const ['doba', 'rytm-snu'], const {}, 'Treningi: minuty, kalorie, wysiłek, godzina końca.', 'czynniki-forma'),
+      const ['doba', 'rytm-snu', 'polar-ekg'], const {}, 'Treningi: minuty, kalorie, wysiłek, godzina końca.', 'czynniki-forma'),
   PlikWymiany._('czynniki-ruch', RegExp(r'^czynniki-ruch$'), 'czynniki-dnia', 1, const ['doba'], 'doba',
       const ['polar-ekg'], const {}, 'Kroki, sport, chód, praca, podróże.', 'czynniki-ruch'),
   PlikWymiany._('kreska-<licznik>', RegExp(r'^kreska-(?!z-).+$'), 'wymiana-zdarzen', 1, const ['kreska'], 'kreska',
