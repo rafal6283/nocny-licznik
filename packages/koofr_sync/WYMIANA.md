@@ -11,7 +11,7 @@ a przykłady każdego pliku w `wymiana/*.json` (też jako stałe `wymianaPrzykla
 |---|---|---|---|---|
 | `rytm-snu` | wymiana-zdarzen v1, source `rytm-snu` (dawniej `nocny-licznik`) | Rytm Snu | Kreska, Dziennik talerza, Doba | noce z nasłuchem (`windows`) i zdarzenia `fart`; tylko gdy dodatek FF jest włączony |
 | `rytm-snu-rytm` | wymiana-zdarzen v1, source `rytm-snu-rytm` | Rytm Snu | Doba, Kreska | czas z tętnem z opaski, zdarzenia `af` (nieregularny rytm) |
-| `czynniki-sen` | czynniki-dnia v1, source `rytm-snu` | Rytm Snu | Polar EKG, Forma, Doba | `sleep_min, score, awakenings, apnea_idx, snore_min, hr_avg, bed_h` |
+| `czynniki-sen` | czynniki-dnia v1, source `rytm-snu` | Rytm Snu | Polar EKG, Forma, Doba | `sleep_min, score, awakenings, apnea_idx, snore_min, hr_avg, bed_h, cpap_ahi, cpap_min` (CPAP tylko w nocach z aparatem) |
 | `polar-ekg` | wymiana-zdarzen v1, source `polar-ekg` | Polar EKG | Kreska, Doba, Rytm Snu | okna zapisu EKG, zdarzenia `af` |
 | `polar-noce` | noc-polar v1 | Polar EKG | Rytm Snu | zapisy nocne minuta po minucie, kolumny `t, hr, rmssd, act, s, v, af` |
 | `czynniki-polar` | czynniki-dnia v1, source `polar-ekg` | Polar EKG | Doba, Forma | `hrv, af_min, af_n` |

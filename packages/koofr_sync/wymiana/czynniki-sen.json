@@ -12,7 +12,9 @@
    "apnea_idx": 4.2,
    "snore_min": 12,
    "hr_avg": 58.1,
-   "bed_h": 23.5
+   "bed_h": 23.5,
+   "cpap_ahi": 2.1,
+   "cpap_min": 405
   }
  ]
 }

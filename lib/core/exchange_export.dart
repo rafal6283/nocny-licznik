@@ -103,7 +103,7 @@ Future<ExchangeExport> exportFartExchange() async {
 ///
 /// {"format": "czynniki-dnia", "version": 1, "source": "rytm-snu", "exported_at": ms,
 ///  "days": [{"date": "RRRR-MM-DD", "sleep_min": 412, "score": 78, "awakenings": 3,
-///            "apnea_idx": 4.2, "snore_min": 12, "hr_avg": 58.1, "bed_h": 23.5}]}
+///            "apnea_idx": 4.2, "snore_min": 12, "hr_avg": 58.1, "bed_h": 23.5, "cpap_ahi": 2.1, "cpap_min": 410}]}
 Future<List<int>> buildSleepFactors() async {
   final nights = await Db.instance.nights();
   final byDay = <String, Map<String, Object?>>{};
@@ -124,6 +124,9 @@ Future<List<int>> buildSleepFactors() async {
       'snore_min': n.snoreMin,
       if (n.hrAvg != null) 'hr_avg': double.parse(n.hrAvg!.toStringAsFixed(1)),
       'bed_h': double.parse((s.hour + s.minute / 60).toStringAsFixed(2)),
+      // aparat CPAP (do wspólnego raportu dla lekarza w Polar EKG)
+      if (n.cpap && n.cpapAhi != null) 'cpap_ahi': double.parse(n.cpapAhi!.toStringAsFixed(1)),
+      if (n.cpap && n.cpapUsageMin != null) 'cpap_min': n.cpapUsageMin,
     };
   }
   final days = byDay.values.toList()..sort((a, b) => (a['date'] as String).compareTo(b['date'] as String));
