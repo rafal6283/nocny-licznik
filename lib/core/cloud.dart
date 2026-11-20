@@ -204,6 +204,11 @@ class Cloud {
   /// Kontener kopii: [4 bajty długości nagłówka][nagłówek JSON][plik bazy SQLite].
   static Future<BackupInfo> backupNow() async {
     if (await _nightActive()) throw KoofrException('Kopię można zrobić, gdy noc nie jest nagrywana.');
+    return sync.backupNow(await buildBackupBytes());
+  }
+
+  /// Treść kopii (bez wysyłania) — osobno, żeby test mógł sprawdzić drogę kopia → nowy telefon.
+  static Future<Uint8List> buildBackupBytes() async {
     final header = utf8.encode(jsonEncode({
       'format': 'rytm-snu-kopia',
       'version': 1,
@@ -215,7 +220,7 @@ class Cloud {
       ..add((ByteData(4)..setUint32(0, header.length)).buffer.asUint8List())
       ..add(header)
       ..add(dbBytes);
-    return sync.backupNow(out.takeBytes());
+    return out.takeBytes();
   }
 
   /// Spójna kopia pliku bazy: VACUUM INTO (Android 11+), w razie braku — zwykła kopia pliku.
@@ -251,7 +256,11 @@ class Cloud {
   /// Przywraca kopię: odkłada obecną bazę obok (bakometr.db.przed-przywroceniem) i podmienia plik.
   static Future<int> restore(BackupInfo b) async {
     if (NightEngine.instance.isActive) throw KoofrException('Zakończ najpierw nagrywanie nocy.');
-    final data = await sync.restore(b);
+    return restoreBytes(await sync.restore(b));
+  }
+
+  /// Podmienia bazę i ustawienia danymi z kopii. Zwraca liczbę nocy po przywróceniu.
+  static Future<int> restoreBytes(Uint8List data) async {
     if (data.length < 4) throw KoofrException('Kopia jest uszkodzona.');
     final hLen = ByteData.sublistView(data, 0, 4).getUint32(0);
     final header = (jsonDecode(utf8.decode(data.sublist(4, 4 + hLen))) as Map).cast<String, Object?>();
