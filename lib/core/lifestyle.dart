@@ -1,5 +1,6 @@
 import 'package:bakometr_native/bakometr_native.dart';
 
+import 'app_life.dart';
 import 'db.dart';
 import 'models.dart';
 import 'settings.dart';
@@ -59,7 +60,7 @@ class Lifestyle {
     for (final n in await Db.instance.nights(limit: 60, naps: true)) {
       if (n.id == null || DateTime.now().difference(n.start).inDays > days) continue;
       final ext = await Db.instance.ext(n.id!);
-      if (ext.any((r) => r.$2 == 'lx_ok')) continue;
+      if (AppLife.hasHealthConnect(ext)) continue; // dane tylko z Dziennika/Formy: Health Connect ma pierwszeństwo
       if (await fetchForNight(n)) c++;
     }
     return c;
@@ -70,6 +71,9 @@ class Lifestyle {
 class LifeFacts {
   final bool hasData;
   final bool caffeineAfter14, alcohol, lateMeal, workout, lateWorkout;
+
+  /// Część danych przyszła z Dziennika talerza lub Formy (przez Koofr) — do oznaczenia w opisach.
+  final bool fromApps;
   final double? eveningKcal, workoutMin, hoursSinceMeal;
   const LifeFacts({
     this.hasData = false,
@@ -81,6 +85,7 @@ class LifeFacts {
     this.eveningKcal,
     this.workoutMin,
     this.hoursSinceMeal,
+    this.fromApps = false,
   });
 
   static LifeFacts of(Night n, List<(DateTime, String, double?, double?)> ext) {
@@ -112,6 +117,7 @@ class LifeFacts {
       eveningKcal: meals.isEmpty ? null : eve,
       workoutMin: exMin,
       hoursSinceMeal: sinceMeal,
+      fromApps: ext.any((r) => r.$2 == 'lx_app'),
     );
   }
 }

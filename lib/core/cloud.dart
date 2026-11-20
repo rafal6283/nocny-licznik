@@ -12,6 +12,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:workmanager/workmanager.dart';
 
 import '../engine/night_engine.dart';
+import 'app_life.dart';
 import 'bus.dart';
 import 'db.dart';
 import 'exchange_export.dart';
@@ -152,6 +153,9 @@ class Cloud {
   // ------------------------------------------------------------ wymiana z moimi aplikacjami
 
   static DateTime? _lastExchange;
+
+  /// Pliki pobierane z innych aplikacji (kontrakt: packages/koofr_sync/WYMIANA.md).
+  static const exchangeSources = ['polar-ekg', 'polar-noce', ...AppLife.files];
   static final lastExchangeMsg = ValueNotifier<String?>(null);
 
   static Future<bool> exchangeOn() async => (await sync.store.read('ks.ex.on')) == '1';
@@ -177,9 +181,11 @@ class Cloud {
     // napady AF i noce z Polar EKG – na wykres nocy (tętno i rytm); w tle tylko wysyłamy
     try {
       if (_background) throw StateError('w tle bez pobierania');
-      final got = await sync.pullExchange((n) => n == 'polar-ekg' || n == 'polar-noce',
-          (name, data) => name == 'polar-noce' ? PolarNights.save(data) : PolarAf.save(data),
-          force: force);
+      final got = await sync.pullExchange((n) => exchangeSources.contains(n), (name, data) async {
+        if (name == 'polar-noce') return PolarNights.save(data);
+        if (name == 'polar-ekg') return PolarAf.save(data);
+        if (AppLife.files.contains(name)) return AppLife.save(name, data);
+      }, force: force);
       if (got.isNotEmpty) {
         msg = '$msg · pobrano z Polar EKG';
         dataChanged();
@@ -189,6 +195,8 @@ class Cloud {
       }
       final filled = await PolarNights.applyAll();
       if (filled > 0) msg = '$msg · noce uzupełnione danymi z opaski: $filled';
+      // posiłki z Dziennika talerza i treningi z Formy jako czynniki snu
+      if (await AppLife.applyAll() > 0) dataChanged();
     } catch (_) {}
     // sen dla Polar EKG (co poprzedza napady AF) – bez wiatrów
     try {

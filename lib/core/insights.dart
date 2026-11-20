@@ -224,12 +224,16 @@ class Insights {
       final what = f.isBool ? f.label : '${f.label}: ${st == 1 ? f.highWord : f.lowWord}';
       final v = f.value(c, r.env);
       final valTxt = f.isBool || v == null ? '' : ' (${v.toStringAsFixed(v.abs() >= 100 ? 0 : 1)}${f.unit})';
-      out.add(NightExplanation(f.emoji, '$what$valTxt', 'zwykle: ${parts.join(', ')}', good >= 0, weight));
+      final imported = c.life.fromApps && _lifeFactors.contains(f.id) ? ' · dane z Dziennika talerza / Formy' : '';
+      out.add(NightExplanation(f.emoji, '$what$valTxt', 'zwykle: ${parts.join(', ')}$imported', good >= 0, weight));
     }
     out.sort((a, b) => b.weight.compareTo(a.weight));
     return out;
   }
 }
+
+/// Czynniki stylu życia (posiłki, kawa, alkohol, trening) — mogą pochodzić z innych aplikacji.
+const _lifeFactors = {'caf', 'alc', 'late_meal', 'eve_kcal', 'workout', 'late_workout'};
 
 class NightExplanation {
   final String emoji, title, detail;

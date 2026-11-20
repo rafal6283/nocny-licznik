@@ -11,7 +11,10 @@
    "big_meal_kcal": 820,
    "last_meal_h": 20.5,
    "alcohol": 1,
-   "coffee": 2
+   "coffee": 2,
+   "eve_kcal": 980,
+   "alcohol_last_h": 20.5,
+   "coffee_last_h": 15.0
   }
  ]
 }

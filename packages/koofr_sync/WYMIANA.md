@@ -15,10 +15,10 @@ a przykłady każdego pliku w `wymiana/*.json` (też jako stałe `wymianaPrzykla
 | `polar-ekg` | wymiana-zdarzen v1, source `polar-ekg` | Polar EKG | Kreska, Doba, Rytm Snu | okna zapisu EKG, zdarzenia `af` |
 | `polar-noce` | noc-polar v1 | Polar EKG | Rytm Snu | zapisy nocne minuta po minucie, kolumny `t, hr, rmssd, act, s, v, af` |
 | `czynniki-polar` | czynniki-dnia v1, source `polar-ekg` | Polar EKG | Doba, Forma | `hrv, af_min, af_n` |
-| `czynniki-posilki` | czynniki-dnia v1, source `dziennik-talerza` | Dziennik talerza | Polar EKG, Forma, Doba | `meals, kcal, big_meal_kcal, last_meal_h, alcohol, coffee` |
+| `czynniki-posilki` | czynniki-dnia v1, source `dziennik-talerza` | Dziennik talerza | Polar EKG, Forma, Doba, Rytm Snu | `meals, kcal, big_meal_kcal, last_meal_h, eve_kcal, alcohol, alcohol_last_h, coffee, coffee_last_h` (pory jako godzina z ułamkiem) |
 | `czynniki-leki` | czynniki-dnia v1, source `teczka` | Teczka | Polar EKG, Doba | `doses, taken, missed` (bez nazw leków) |
 | `czynniki-portfel` | czynniki-dnia v1, source `portfel` | Portfel | Doba | `value` |
-| `czynniki-forma` | czynniki-dnia v1, source `forma` | Forma | Doba | `train_min, train_kcal, rpe_max, end_h, other_min` |
+| `czynniki-forma` | czynniki-dnia v1, source `forma` | Forma | Doba, Rytm Snu | `train_min, train_kcal, rpe_max, end_h, other_min` |
 | `czynniki-ruch` | czynniki-dnia v1, source `doba` | Doba | Polar EKG | `steps, sport_min, walk_min, work_min, travel_min` |
 | `kreska-<licznik>` | wymiana-zdarzen v1, source `kreska`, `counter` | Kreska | Dziennik talerza, Doba | kliknięcia `tap`, `day_totals` |
 | `kreska-z-<zdarzenie>` | wymiana-zdarzen v1, source `kreska`, `kind: tracker` | Kreska | Polar EKG, Doba | odcinki `session` bez pauz, `day_totals` |

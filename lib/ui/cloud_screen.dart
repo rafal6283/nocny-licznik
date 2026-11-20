@@ -979,6 +979,7 @@ class _ExchangeCardState extends State<_ExchangeCard> {
           title: const Text('Wymiana z moimi aplikacjami'),
           subtitle: Text('${Settings.instance.detectFarts ? 'FF → Kreska, Doba i Dziennik talerza. ' : ''}'
               'Nieregularny rytm z opaski → Doba. Podsumowanie snu → Polar EKG (co poprzedza napady AF). '
+              'Posiłki z Dziennika talerza i treningi z Formy → czynniki snu. '
               'Aplikacje pobiorą dane same przez Koofr, '
               'widzą je tylko Twoje aplikacje (ten sam kod odzyskiwania).'),
           value: v,
@@ -1015,7 +1016,7 @@ class _ExchangeCardState extends State<_ExchangeCard> {
             subtitle: const Text('Co i kiedy zostało wysłane i wczytane, błędy'),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
-                builder: (_) => ExchangeStatusScreen(sync: Cloud.sync, sources: const ['polar-ekg', 'polar-noce']))),
+                builder: (_) => ExchangeStatusScreen(sync: Cloud.sync, sources: Cloud.exchangeSources))),
           ),
       ]),
     );
