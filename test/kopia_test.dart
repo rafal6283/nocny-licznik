@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:bakometr/core/cloud.dart';
 import 'package:bakometr/core/db.dart';
 import 'package:bakometr/core/models.dart';
+import 'package:bakometr/core/settings.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:koofr_sync/testing.dart';
@@ -25,6 +26,7 @@ void main() {
 
   test('przywrócenie kopii na czystym telefonie', () async {
     SharedPreferences.setMockInitialValues({'detectFarts': false, 'sensitivity': 0.7});
+    await Settings.instance.load();
     final path = await Db.path;
     await Db.instance.close();
     if (await File(path).exists()) await File(path).delete();
