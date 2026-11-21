@@ -54,7 +54,11 @@ void main() {
   testWidgets('zrzuty ekranów', (t) async {
     final errors = <String>[];
     final onError = FlutterError.onError;
-    FlutterError.onError = (d) => errors.add(d.exceptionAsString());
+    FlutterError.onError = (d) {
+      errors.add(d.exceptionAsString());
+      // ignore: avoid_print
+      print('BŁĄD W ZRZUTACH: ${d.exceptionAsString()}\n${d.stack.toString().split('\n').take(10).join('\n')}');
+    };
     SharedPreferences.setMockInitialValues({});
     final dir = (await t.runAsync(() => Directory.systemTemp.createTemp('shots')))!;
     // path_provider bez wtyczki: wszystkie katalogi w jednym tymczasowym
