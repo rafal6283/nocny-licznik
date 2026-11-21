@@ -60,6 +60,27 @@ void main() {
       print('BŁĄD W ZRZUTACH: ${d.exceptionAsString()}\n${d.stack.toString().split('\n').take(10).join('\n')}');
     };
     SharedPreferences.setMockInitialValues({});
+    // bezpieczny magazyn (konto Koofr) – w teście pusty
+    final secure = <String, String>{};
+    t.binding.defaultBinaryMessenger.setMockMethodCallHandler(const MethodChannel('plugins.it_nomads.com/flutter_secure_storage'), (c) async {
+      final key = (c.arguments as Map?)?['key'] as String?;
+      switch (c.method) {
+        case 'read':
+          return key == null ? null : secure[key];
+        case 'write':
+          secure[key!] = (c.arguments as Map)['value'] as String;
+          return null;
+        case 'delete':
+          secure.remove(key);
+          return null;
+        case 'containsKey':
+          return secure.containsKey(key);
+        case 'readAll':
+          return secure;
+        default:
+          return null;
+      }
+    });
     final dir = (await t.runAsync(() => Directory.systemTemp.createTemp('shots')))!;
     // path_provider bez wtyczki: wszystkie katalogi w jednym tymczasowym
     t.binding.defaultBinaryMessenger.setMockMethodCallHandler(
