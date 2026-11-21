@@ -10,6 +10,7 @@ import '../core/stats_util.dart';
 import '../core/weather_impact.dart';
 import 'charts.dart';
 import 'metric_detail_screen.dart';
+import 'night_calendar.dart';
 import 'theme.dart';
 import 'cpap/cpap_screen.dart';
 import 'experiments_screen.dart';
@@ -113,6 +114,8 @@ class _StatsScreenState extends State<StatsScreen> {
         const SizedBox(height: 12),
         _tools(),
         const SizedBox(height: 16),
+        Section(title: 'Kalendarz nocy · 12 tygodni', child: NightCalendarCard(nights: chrono)),
+        const SizedBox(height: 12),
         for (final m in metrics) ...[
           _metricCard(m),
           const SizedBox(height: 12),
