@@ -28,6 +28,7 @@ import '../core/strap.dart';
 import 'classifier.dart';
 import 'accel_breath.dart';
 import 'sleep_analysis.dart';
+import 'snore_minute.dart';
 import 'stage_model.dart';
 import 'strap_minute.dart';
 import 'sonar.dart';
@@ -169,6 +170,7 @@ class NightEngine extends ChangeNotifier {
   int _minNoiseN = 0;
   int _minFarts = 0;
   bool _minSnore = false;
+  final _snoreMinute = SnoreMinute();
   int _minApneas = 0;
   int _minSounds = 0;
   int _minuteIdx = 0;
@@ -414,6 +416,7 @@ class NightEngine extends ChangeNotifier {
     _minNoiseN = 0;
     _minFarts = 0;
     _minSnore = false;
+    _snoreMinute.reset();
     _minApneas = 0;
     _minSounds = 0;
   }
@@ -579,7 +582,9 @@ class NightEngine extends ChangeNotifier {
         final loudOk = !cpap || levelDb > noiseFloorDb + 8;
         if (s.fart >= thr && loudOk) _hit(SoundType.fart, s.fart, now, gapMs: 2500);
       }
-      if (s.snore >= _thr(_s.snoreSensitivity, 0.15, 0.6)) _hit(SoundType.snore, s.snore, now, gapMs: 60000);
+      // CPAP: szum aparatu i nieszczelności maski – wyższy próg i dźwięk wyraźnie ponad tłem.
+      final snoreThr = _thr(_s.snoreSensitivity, 0.15, 0.6) + (cpap ? 0.15 : 0);
+      if (s.snore >= snoreThr && (!cpap || levelDb > noiseFloorDb + 6)) _hit(SoundType.snore, s.snore, now, gapMs: 60000);
       if (_s.detectTalk && s.speech >= 0.6) _hit(SoundType.talk, s.speech, now, gapMs: 10000);
       if (_s.detectCough && s.cough >= 0.45) _hit(SoundType.cough, s.cough, now, gapMs: 3000);
 
@@ -602,7 +607,9 @@ class NightEngine extends ChangeNotifier {
     if (t == SoundType.snore) {
       _snoreHits.add(now);
       _snoreHits.removeWhere((d) => now.difference(d).inSeconds > 90);
-      _minSnore = true;
+      _snoreMinute.add(now);
+      // minuta chrapania dopiero przy kilku oddechach z chrapaniem (nie przy stałym szumie)
+      if (_snoreMinute.snoring) _minSnore = true;
       snoreHitsTotal++;
       _maybeNudge(now);
     }
