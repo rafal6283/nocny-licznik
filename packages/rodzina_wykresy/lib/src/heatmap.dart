@@ -83,10 +83,12 @@ class _CalendarHeatmapState extends State<CalendarHeatmap> {
       var lastX = -100.0;
       for (var w = 0; w < widget.weeks; w++) {
         final d0 = DateTime(start.year, start.month, start.day + w * 7);
-        final first = w == 0 || DateTime(d0.year, d0.month, d0.day + 6).month != d0.month || d0.day <= 7;
+        final d6 = DateTime(d0.year, d0.month, d0.day + 6);
+        // etykieta nad tygodniem, w którym wypada 1. dzień miesiąca; pierwsza kolumna – gdy do końca miesiąca daleko
+        final hasFirst = d0.day == 1 || d6.month != d0.month;
+        final int? m = hasFirst ? d6.month : (w == 0 && d0.day <= 18 ? d0.month : null);
         final x = labelW + w * cell;
-        if (first && x - lastX > 2.6 * cell) {
-          final m = d0.day <= 7 || w == 0 ? d0.month : DateTime(d0.year, d0.month, d0.day + 6).month;
+        if (m != null && x - lastX > 2.6 * cell) {
           months.add(Positioned(left: x, top: 0, child: Text(_monthsShort[m - 1], style: theme.textTheme.labelSmall?.copyWith(fontSize: 9))));
           lastX = x;
         }
